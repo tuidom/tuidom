@@ -1,0 +1,22 @@
+{
+    "compilerOptions": {
+        "target": "ES2024",
+        "module": "Node16",
+        "moduleResolution": "Node16",
+        "rewriteRelativeImportExtensions": true,
+        "allowImportingTsExtensions": true,
+        "noEmit": false,
+        "declaration": true,
+        "sourceMap": false,
+        "declarationMap": false,
+        "outDir": "./dist",
+        "rootDir": "./src",
+        "strict": true,
+        "verbatimModuleSyntax": true,
+        "esModuleInterop": true,
+        "skipLibCheck": true,
+        "types": ["node"]
+    },
+    "include": ["src"],
+    "exclude": ["src/**/*.test.ts", "src/**/*.stories.ts", "src/**/*.bench.ts"]
+}

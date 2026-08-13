@@ -1,0 +1,65 @@
+{
+    "name": "@tuidom/all",
+    "version": "0.1.0",
+    "type": "module",
+    "description": "Experimental terminal UI DOM (from the Vexx editor). API is unstable.",
+    "license": "MIT",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/tuidom/tuidom.git"
+    },
+    "engines": {
+        "node": ">=24.0.0"
+    },
+    "keywords": [
+        "tui",
+        "terminal",
+        "ui",
+        "dom"
+    ],
+    "files": [
+        "dist"
+    ],
+    "exports": {
+        "./package.json": "./package.json",
+        "./*.js": "./dist/*.js",
+        "./*": "./dist/*.js"
+    },
+    "scripts": {
+        "build": "node scripts/build-package.mjs --no-pack",
+        "pack": "node scripts/build-package.mjs",
+        "prepublishOnly": "node scripts/build-package.mjs",
+        "test": "vitest run",
+        "test:coverage": "vitest run --coverage",
+        "test:watch": "vitest",
+        "test:perf": "vitest bench --run --config vitest.perf.config.ts",
+        "typecheck": "tsc --noEmit",
+        "lint": "eslint src/ demos/",
+        "lint:fix": "eslint src/ demos/ --fix",
+        "demo": "tsx demos/minimalHost.ts",
+        "demo:inspect": "tsx demos/inspectedHost.ts",
+        "demo:events": "tsx demos/eventLogDemo.ts",
+        "demo:raw-events": "tsx demos/tokenizeDemo.ts",
+        "demo:renderer": "tsx demos/rendererDemo.ts",
+        "demo:mouse": "tsx demos/mouseDemo.ts",
+        "demo:layout": "tsx demos/layoutDemo.ts",
+        "demo:key-parser": "tsx demos/keyInputParserDemo.ts"
+    },
+    "devDependencies": {
+        "@eslint/js": "^10.0.1",
+        "@types/node": "^25.5.2",
+        "@types/ws": "^8.18.1",
+        "@vitest/coverage-v8": "^4.0.18",
+        "eslint": "^10.0.3",
+        "eslint-config-prettier": "^10.1.8",
+        "eslint-plugin-prettier": "^5.5.5",
+        "eslint-plugin-simple-import-sort": "^12.1.1",
+        "jiti": "^2.6.1",
+        "prettier": "^3.8.1",
+        "tsx": "^4.21.0",
+        "typescript": "^5.8",
+        "typescript-eslint": "^8.56.1",
+        "vitest": "^4.0.18",
+        "ws": "^8.21.0"
+    }
+}
