@@ -1,6 +1,6 @@
 # Inspector/
 
-Слой движка TUIDom (пакет `@tuidom/all`). Хост-приложение — [Vexx](https://github.com/tihonove/vexx).
+Слой движка TUIDom (монорепа пакетов `@tuidom/*`). Хост-приложение — [Vexx](https://github.com/tihonove/vexx).
 
 Инспектор TUIDom («браузерный дебаг-порт»): сериализация дерева элементов и протокол поверх WebSocket. `InspectorCore` — transport-agnostic ядро: держит read-only ссылку на приложение через `InspectorTarget { getRoot, getFocused }` и отвечает на методы протокола (`TUIDom.getDocument`); методы — расширяемый реестр, `dispatch` асинхронный (хендлеры могут возвращать `Promise`). `InspectorServer` — рукописный WebSocket (RFC6455) поверх `node:http`, без runtime-зависимостей. `attachInspector(app)` поднимает порт поверх работающего `TuiApplication`, читая его read-only (сам `TuiApplication` не трогается). Транспорт-агностичность ядра — задел под встроенный in-process инспектор (split-screen): тот же `InspectorCore` без сети.
 

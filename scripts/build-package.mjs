@@ -1,14 +1,21 @@
 #!/usr/bin/env node
 
-// Сборка npm-пакета @tuidom/all из src/:
+// Сборка npm-пакетов монорепы из packages/*/src:
 //
-//   tsc-emit JS + .d.ts (rewriteRelativeImportExtensions переписывает .ts→.js
-//   в JS-выхлопе) → пост-проход по .d.ts (tsc расширения в декларациях не
-//   переписывает — без этого потребителю нужен TS ≥ 5.7) → npm pack →
-//   smoke на голом node (без tsx): deep-пути exports + testing/*.
+//   Цикл по пакетам в топологическом порядке (владеет им ЭТОТ скрипт —
+//   `npm run build --workspaces` порядок не гарантирует):
+//     tsc-emit JS + .d.ts (rewriteRelativeImportExtensions переписывает .ts→.js
+//     в относительных специфаерах; bare-специфаеры @tuidom/* не трогаются) →
+//     пост-проход по .d.ts (tsc расширения в декларациях не переписывает) →
+//     патч exports пакета: src/*.ts → dist/*.js → npm pack.
 //
-// Тесты/истории/бенчи отсекает exclude в tsconfig.build.json; demos/ лежит вне
-// src/ и в сборку не попадает физически.
+//   Патч exports нужен ДО сборки следующего пакета: его tsc резолвит
+//   @tuidom/*-импорты через exports уже собранных зависимостей в dist/*.d.ts —
+//   чужие исходники не попадают в программу, а типы совпадают с публикуемыми.
+//   В finally exports восстанавливаются на src (dev-резолв).
+//
+// Тесты отсекает exclude в packages/*/tsconfig.build.json; stories/ и demos/
+// приватные и не собираются.
 //
 // Запуск: node scripts/build-package.mjs [--no-pack] [--no-smoke]
 
@@ -17,6 +24,9 @@ import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "n
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
+
+// Топологический порядок: каждый пакет собирается после своих зависимостей.
+const PACKAGES = ["core", "elements", "terminal-backend", "headless-backend", "testing", "inspector"];
 
 const repoRoot = resolve(import.meta.dirname, "..");
 
@@ -45,24 +55,27 @@ function rewriteDtsExtensions(distDir) {
     walk(distDir);
 }
 
-/** Ставит tgz в чистый временный проект вне репо и рендерит кадр на голом node — доказывает валидность emit'а. */
-function smokeTest(pkgName, tgzPath) {
+/** Ставит все tgz в чистый временный проект вне репо и рендерит кадр на голом node — доказывает валидность emit'а. */
+function smokeTest(tgzPaths) {
     const dir = mkdtempSync(join(tmpdir(), "tuidom-smoke-"));
     try {
         writeFileSync(join(dir, "package.json"), JSON.stringify({ type: "module", private: true }));
-        run(`npm install --no-audit --no-fund ${tgzPath}`, dir);
+        run(`npm install --no-audit --no-fund ${tgzPaths.join(" ")}`, dir);
         writeFileSync(
             join(dir, "smoke.mjs"),
-            `import { HeadlessCaptureBackend } from "${pkgName}/backend/headlessCaptureBackend";
-import { Size } from "${pkgName}/common/geometryPromitives";
-import { TuiApplication } from "${pkgName}/dom/tuiApplication";
-import { BodyElement } from "${pkgName}/ui/body/bodyElement";
-import { BoxElement } from "${pkgName}/ui/layout/boxElement";
+            `import { Size } from "@tuidom/core/common/geometryPromitives";
+import { TuiApplication } from "@tuidom/core/dom/tuiApplication";
+import { BodyElement } from "@tuidom/elements/body/bodyElement";
+import { BoxElement } from "@tuidom/elements/layout/boxElement";
 // Глубокий модуль ui-виджета: доказывает, что deep-пути экспортов резолвятся на голом node.
-import { MenuBarItemElement } from "${pkgName}/ui/menu/menuBarItemElement";
+import { MenuBarItemElement } from "@tuidom/elements/menu/menuBarItemElement";
+import { HeadlessCaptureBackend } from "@tuidom/headless-backend/headlessCaptureBackend";
+// Остальные пакеты — smoke на резолв/загрузку deep-путей.
+import { attachInspector } from "@tuidom/inspector/attachInspector";
+import { isInsideTmux } from "@tuidom/terminal-backend/terminalEnv";
 // Тест-харнесс — публикуемая поверхность: vexx (и любой хост) тестируется им из пакета.
-import { renderElement } from "${pkgName}/testing/renderElement";
-import { TestApp } from "${pkgName}/testing/TestApp";
+import { renderElement } from "@tuidom/testing/renderElement";
+import { TestApp } from "@tuidom/testing/TestApp";
 
 const backend = new HeadlessCaptureBackend(new Size(40, 10));
 const app = new TuiApplication(backend);
@@ -82,7 +95,13 @@ if (harnessBackend.getTextAt === undefined) {
     console.error("smoke FAILED: testing/renderElement вернул не MockTerminalBackend");
     process.exit(1);
 }
-console.log(\`smoke OK: \${ink} non-space cells, MenuBarItemElement=\${typeof MenuBarItemElement}, TestApp=\${typeof TestApp}\`);
+for (const [name, value] of Object.entries({ MenuBarItemElement, TestApp, attachInspector, isInsideTmux })) {
+    if (typeof value !== "function") {
+        console.error(\`smoke FAILED: \${name} не функция/класс: \${typeof value}\`);
+        process.exit(1);
+    }
+}
+console.log(\`smoke OK: \${ink} non-space cells, 6 пакетов, deep-пути резолвятся\`);
 `,
         );
         run("node smoke.mjs", dir);
@@ -98,20 +117,49 @@ const { values: args } = parseArgs({
     },
 });
 
-const packageJson = JSON.parse(readFileSync(join(repoRoot, "package.json"), "utf8"));
+const DIST_EXPORTS = {
+    "./package.json": "./package.json",
+    "./*.js": "./dist/*.js",
+    "./*": "./dist/*.js",
+};
 
-rmSync(join(repoRoot, "dist"), { recursive: true, force: true });
-run("npx tsc -p tsconfig.build.json", repoRoot);
-rewriteDtsExtensions(join(repoRoot, "dist"));
-console.log("[build-package] dist/ собран");
+// Оригиналы package.json — для восстановления src-exports в finally (crash-safe).
+const originals = new Map();
+const tgzPaths = [];
 
-if (!args["no-pack"]) {
-    run("npm pack", repoRoot);
-    const tgzPath = join(
-        repoRoot,
-        `${packageJson.name.replace(/^@/, "").replace("/", "-")}-${packageJson.version}.tgz`,
-    );
-    if (!args["no-smoke"]) smokeTest(packageJson.name, tgzPath);
-    console.log(`\n[build-package] Пакет: ${tgzPath}`);
-    console.log("[build-package] Публикация: npm publish --access public");
+try {
+    for (const name of PACKAGES) {
+        const pkgDir = join(repoRoot, "packages", name);
+        const pkgJsonPath = join(pkgDir, "package.json");
+        const originalJson = readFileSync(pkgJsonPath, "utf8");
+        originals.set(pkgJsonPath, originalJson);
+
+        rmSync(join(pkgDir, "dist"), { recursive: true, force: true });
+        run(`npx tsc -p packages/${name}/tsconfig.build.json`, repoRoot);
+        rewriteDtsExtensions(join(pkgDir, "dist"));
+
+        // dist-exports до сборки следующего пакета: его tsc должен резолвить
+        // этот пакет в dist/*.d.ts, а не в src.
+        const pkgJson = JSON.parse(originalJson);
+        pkgJson.exports = DIST_EXPORTS;
+        writeFileSync(pkgJsonPath, JSON.stringify(pkgJson, null, 4) + "\n");
+        console.log(`[build-package] ${pkgJson.name}: dist/ собран`);
+
+        if (!args["no-pack"]) {
+            run(`npm pack --pack-destination "${repoRoot}"`, pkgDir);
+            tgzPaths.push(join(repoRoot, `${pkgJson.name.replace(/^@/, "").replace("/", "-")}-${pkgJson.version}.tgz`));
+        }
+    }
+
+    if (!args["no-pack"] && !args["no-smoke"]) smokeTest(tgzPaths);
+} finally {
+    for (const [path, contents] of originals) writeFileSync(path, contents);
+}
+
+if (tgzPaths.length > 0) {
+    console.log("\n[build-package] Пакеты:");
+    for (const tgz of tgzPaths) console.log(`  ${tgz}`);
+    // Публикуем именно tgz: в них exports уже указывает на dist. `npm publish` из
+    // директории пакета взял бы рабочий package.json с dev-exports (src/*.ts) — сломанный пакет.
+    console.log("[build-package] Публикация (строго по tgz): for t in tuidom-*.tgz; do npm publish \"$t\" --access public; done");
 }

@@ -17,5 +17,5 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm run test:coverage
-      # Сборка пакета + npm pack + smoke на голом node (deep-exports, testing/*).
+      # Топологическая сборка пакетов + npm pack + smoke шести tgz на голом node (deep-exports).
       - run: npm run pack
