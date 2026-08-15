@@ -2,7 +2,7 @@ import { defineConfig } from "vitest/config";
 
 export default defineConfig({
     test: {
-        include: ["src/**/*.test.ts", "demos/**/*.test.ts"],
+        include: ["packages/*/src/**/*.test.ts", "demos/**/*.test.ts"],
         coverage: {
             skipFull: true,
             reportOnFailure: true,
@@ -17,29 +17,28 @@ export default defineConfig({
                 lines: 99.26,
             },
             reporter: ["text", "lcov", "json", "json-summary", "text-summary"],
-            include: ["src/**/*.ts"],
+            include: ["packages/*/src/**/*.ts"],
             exclude: [
-                "src/**/*.test.ts",
-                "src/**/*.bench.ts", // перф-бенчмарки, гоняются отдельным test:perf
-                "src/**/*.stories.ts",
-                "src/testing/perfFixtures.ts", // фикстуры только для бенчей
+                "packages/*/src/**/*.test.ts",
+                "packages/stories/**", // stories и перф-бенчи, гоняются отдельным test:perf
+                "packages/testing/src/perfFixtures.ts", // фикстуры только для бенчей
 
                 // --- Чистые типы: нечего исполнять ---
-                "src/common/iTerminalSurface.ts",
-                "src/inspector/index.ts", // barrel re-export
-                "src/dom/styles/index.ts", // barrel re-export
-                "src/backend/iTerminalBackend.ts",
-                "src/input/rawTerminalToken.ts",
-                "src/ui/tree/iTreeDataProvider.ts",
-                "src/ui/scrollbar/iScrollable.ts", // только интерфейсы (type guards удалены как мёртвые)
-                "src/testing/storyTypes.ts", // только типы story-контракта
+                "packages/core/src/common/iTerminalSurface.ts",
+                "packages/inspector/src/index.ts", // barrel re-export
+                "packages/core/src/dom/styles/index.ts", // barrel re-export
+                "packages/core/src/backend/iTerminalBackend.ts",
+                "packages/core/src/input/rawTerminalToken.ts",
+                "packages/elements/src/tree/iTreeDataProvider.ts",
+                "packages/elements/src/scrollbar/iScrollable.ts", // только интерфейсы (type guards удалены как мёртвые)
+                "packages/testing/src/storyTypes.ts", // только типы story-контракта
 
                 // --- Непокрываемо юнит-тестами ---
-                "src/backend/nodeTerminalBackend.ts", // реальный tty/stdin/stdout
-                "src/inspector/InspectorDriver.ts", // только интерфейс write/capture-порта
-                "src/inspector/InspectorServer.ts", // рукописный ws-транспорт (смоук-тест)
-                "src/inspector/ws/**", // рукописный RFC6455 фрейминг
-                "src/inspector/attachInspector.ts", // поднимает реальный сервер (смоук-тест)
+                "packages/terminal-backend/src/nodeTerminalBackend.ts", // реальный tty/stdin/stdout
+                "packages/inspector/src/InspectorDriver.ts", // только интерфейс write/capture-порта
+                "packages/inspector/src/InspectorServer.ts", // рукописный ws-транспорт (смоук-тест)
+                "packages/inspector/src/ws/**", // рукописный RFC6455 фрейминг
+                "packages/inspector/src/attachInspector.ts", // поднимает реальный сервер (смоук-тест)
             ],
         },
     },

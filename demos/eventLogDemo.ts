@@ -17,8 +17,8 @@
  * See: https://sw.kovidgoyal.net/kitty/keyboard-protocol/
  */
 
-import type { KeyPressEvent } from "../src/input/keyEvent.ts";
-import { KeyInputParser } from "../src/input/keyInputParser.ts";
+import type { KeyPressEvent } from "@tuidom/core/input/keyEvent";
+import { KeyInputParser } from "@tuidom/core/input/keyInputParser";
 
 import { exitOnCtrlC, stdin, stdout } from "./demoSetup.ts";
 

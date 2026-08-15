@@ -5,11 +5,11 @@
 // Port is argv[2] (0 = ephemeral). Ctrl+C exits.
 // Run: npm run demo:tuidom:inspect -- <port>
 
-import { NodeTerminalBackend } from "../src/backend/nodeTerminalBackend.ts";
-import { TuiApplication } from "../src/dom/tuiApplication.ts";
-import { attachInspector } from "../src/inspector/index.ts";
-import { BodyElement } from "../src/ui/body/bodyElement.ts";
-import { BoxElement } from "../src/ui/layout/boxElement.ts";
+import { TuiApplication } from "@tuidom/core/dom/tuiApplication";
+import { BodyElement } from "@tuidom/elements/body/bodyElement";
+import { BoxElement } from "@tuidom/elements/layout/boxElement";
+import { attachInspector } from "@tuidom/inspector/index";
+import { NodeTerminalBackend } from "@tuidom/terminal-backend/nodeTerminalBackend";
 
 const port = Number(process.argv[2] ?? 0);
 

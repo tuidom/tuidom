@@ -1,0 +1,33 @@
+{
+    "name": "@tuidom/headless-backend",
+    "version": "0.1.0",
+    "type": "module",
+    "description": "Experimental terminal UI DOM — headless capture backend (in-memory frames for screenshots/e2e). API is unstable.",
+    "license": "MIT",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/tuidom/tuidom.git",
+        "directory": "packages/headless-backend"
+    },
+    "engines": {
+        "node": ">=24.0.0"
+    },
+    "keywords": [
+        "tui",
+        "terminal",
+        "ui",
+        "dom",
+        "headless"
+    ],
+    "files": [
+        "dist"
+    ],
+    "exports": {
+        "./package.json": "./package.json",
+        "./*.js": "./src/*.ts",
+        "./*": "./src/*.ts"
+    },
+    "dependencies": {
+        "@tuidom/core": "0.1.0"
+    }
+}

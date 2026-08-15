@@ -1,8 +1,9 @@
 {
-    "name": "@tuidom/all",
+    "name": "tuidom-monorepo",
     "version": "0.1.0",
+    "private": true,
     "type": "module",
-    "description": "Experimental terminal UI DOM (from the Vexx editor). API is unstable.",
+    "description": "Монорепа TUIDom: @tuidom/core, elements, terminal-backend, headless-backend, inspector, testing.",
     "license": "MIT",
     "repository": {
         "type": "git",
@@ -11,31 +12,21 @@
     "engines": {
         "node": ">=24.0.0"
     },
-    "keywords": [
-        "tui",
-        "terminal",
-        "ui",
-        "dom"
+    "workspaces": [
+        "packages/*",
+        "demos"
     ],
-    "files": [
-        "dist"
-    ],
-    "exports": {
-        "./package.json": "./package.json",
-        "./*.js": "./dist/*.js",
-        "./*": "./dist/*.js"
-    },
     "scripts": {
         "build": "node scripts/build-package.mjs --no-pack",
         "pack": "node scripts/build-package.mjs",
-        "prepublishOnly": "node scripts/build-package.mjs",
+        "set-version": "node scripts/set-version.mjs",
         "test": "vitest run",
         "test:coverage": "vitest run --coverage",
         "test:watch": "vitest",
         "test:perf": "vitest bench --run --config vitest.perf.config.ts",
         "typecheck": "tsc --noEmit",
-        "lint": "eslint src/ demos/",
-        "lint:fix": "eslint src/ demos/ --fix",
+        "lint": "eslint packages/ demos/",
+        "lint:fix": "eslint packages/ demos/ --fix",
         "demo": "tsx demos/minimalHost.ts",
         "demo:inspect": "tsx demos/inspectedHost.ts",
         "demo:events": "tsx demos/eventLogDemo.ts",

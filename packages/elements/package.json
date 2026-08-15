@@ -1,0 +1,33 @@
+{
+    "name": "@tuidom/elements",
+    "version": "0.1.0",
+    "type": "module",
+    "description": "Experimental terminal UI DOM — widgets: lists, trees, menus, inputs, quick pick. API is unstable.",
+    "license": "MIT",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/tuidom/tuidom.git",
+        "directory": "packages/elements"
+    },
+    "engines": {
+        "node": ">=24.0.0"
+    },
+    "keywords": [
+        "tui",
+        "terminal",
+        "ui",
+        "dom",
+        "widgets"
+    ],
+    "files": [
+        "dist"
+    ],
+    "exports": {
+        "./package.json": "./package.json",
+        "./*.js": "./src/*.ts",
+        "./*": "./src/*.ts"
+    },
+    "dependencies": {
+        "@tuidom/core": "0.1.0"
+    }
+}

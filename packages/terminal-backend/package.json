@@ -1,0 +1,33 @@
+{
+    "name": "@tuidom/terminal-backend",
+    "version": "0.1.0",
+    "type": "module",
+    "description": "Experimental terminal UI DOM — real terminal backend for Node (tty, ANSI diffing, Kitty protocol). API is unstable.",
+    "license": "MIT",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/tuidom/tuidom.git",
+        "directory": "packages/terminal-backend"
+    },
+    "engines": {
+        "node": ">=24.0.0"
+    },
+    "keywords": [
+        "tui",
+        "terminal",
+        "ui",
+        "dom",
+        "backend"
+    ],
+    "files": [
+        "dist"
+    ],
+    "exports": {
+        "./package.json": "./package.json",
+        "./*.js": "./src/*.ts",
+        "./*": "./src/*.ts"
+    },
+    "dependencies": {
+        "@tuidom/core": "0.1.0"
+    }
+}

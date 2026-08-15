@@ -11,11 +11,11 @@
  * Ctrl+C: выход
  */
 
-import { packRgb } from "../src/common/colorUtils.ts";
-import { Point, Size } from "../src/common/geometryPromitives.ts";
-import { StyleFlags } from "../src/common/styleFlags.ts";
-import { Grid } from "../src/rendering/grid.ts";
-import { TerminalRenderer } from "../src/rendering/terminalRenderer.ts";
+import { packRgb } from "@tuidom/core/common/colorUtils";
+import { Point, Size } from "@tuidom/core/common/geometryPromitives";
+import { StyleFlags } from "@tuidom/core/common/styleFlags";
+import { Grid } from "@tuidom/core/rendering/grid";
+import { TerminalRenderer } from "@tuidom/core/rendering/terminalRenderer";
 
 // ── Theme: VS Code Dark Modern ───────────────────────────────────
 
