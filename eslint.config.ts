@@ -5,7 +5,7 @@ import tseslint from "typescript-eslint";
 
 export default tseslint.config(
     {
-        ignores: ["dist/", "node_modules/", "coverage/", "*.config.*", "scripts/"],
+        ignores: ["**/dist/", "node_modules/", "coverage/", "*.config.*", "scripts/"],
     },
 
     eslint.configs.recommended,
@@ -40,7 +40,13 @@ export default tseslint.config(
     },
     {
         // ANSI-последовательности в парсерах/бэкендах — контрольные символы в регэкспах законны.
-        files: ["src/backend/**", "demos/**"],
+        files: [
+            "packages/core/src/input/**",
+            "packages/terminal-backend/src/**",
+            "packages/headless-backend/src/**",
+            "packages/testing/src/**",
+            "demos/**",
+        ],
         rules: {
             "no-control-regex": "off",
         },
@@ -67,6 +73,20 @@ export default tseslint.config(
                 },
             ],
             "simple-import-sort/exports": "warn",
+            // Кросс-пакетные импорты — строго без расширения: bare-специфаер с .ts
+            // rewriteRelativeImportExtensions не переписывает, и у потребителя из npm
+            // такой путь не резолвится (тихая мина в опубликованном пакете).
+            "no-restricted-imports": [
+                "error",
+                {
+                    patterns: [
+                        {
+                            group: ["@tuidom/**/*.ts"],
+                            message: "Кросс-пакетный импорт — без расширения .ts: @tuidom/<pkg>/<путь>.",
+                        },
+                    ],
+                },
+            ],
             // Запрещаем inline import() в аннотациях типов — используй import type вместо этого
             "no-restricted-syntax": [
                 "error",

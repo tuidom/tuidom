@@ -1,6 +1,6 @@
 # TUIDom/
 
-Слой движка TUIDom (пакет `@tuidom/all`). Хост-приложение — [Vexx](https://github.com/tihonove/vexx).
+Слой движка TUIDom (монорепа пакетов `@tuidom/*`). Хост-приложение — [Vexx](https://github.com/tihonove/vexx).
 
 TUI-фреймворк — дерево элементов с layout, событиями, фокусом (аналог браузерного DOM). Layout и позиционирование — в [../LAYOUT.md](../LAYOUT.md).
 
@@ -26,7 +26,7 @@ tight на свой размер (пункты меню/полосы меню). 
 
 Подсистемы: **Events** (capture/bubble, клавиатура/фокус, менеджер фокуса с tab-навигацией, default actions), **Styles** ([../STYLES.md](../STYLES.md): наследование `fg`/`bg`, sentinel `INHERITED_*`, when-варианты состояний — hover/focus ведёт ядро, токены-переменные темы с дефолтами в `styleTokens.ts`, dirty-пропагация + top-down резолвинг), **Widgets** (боксы с рамкой, стек, word-wrap текст, скролл, меню, `CompletionListElement`, `FitContentElement` — контейнер «размер по содержимому» под loose-constraints overlay-слоя, типовой корень диалогов/поповеров, `SizedBoxElement` — контейнер фиксированного «предпочтительного» размера (клампится к constraints), корень overlay-виджетов фиксированной ширины (find), и др.).
 
-Vexx-специфичные части UI (диалоги `ConfirmDialog`/`ConfirmSaveDialog`/`AboutDialog`, статус-бар, группа редакторов, find-виджет) — **не** виджеты TUIDom: они живут компонентами в Workbench и собирают view из примитивов (`HFlexElement`/`VFlexElement`, `TextLabelElement`, `FillerElement`, `FitContentElement`, `OverlayHostElement`, `SizedBoxElement`); критерий и формы — [Workbench.md (vexx)](https://github.com/tihonove/vexx/blob/main/docs/arch/Workbench.md), «Разделение Service/Component / Element / State». В `src/ui/` остаются только виджеты общего назначения — чей публичный API не упоминает понятий Vexx.
+Vexx-специфичные части UI (диалоги `ConfirmDialog`/`ConfirmSaveDialog`/`AboutDialog`, статус-бар, группа редакторов, find-виджет) — **не** виджеты TUIDom: они живут компонентами в Workbench и собирают view из примитивов (`HFlexElement`/`VFlexElement`, `TextLabelElement`, `FillerElement`, `FitContentElement`, `OverlayHostElement`, `SizedBoxElement`); критерий и формы — [Workbench.md (vexx)](https://github.com/tihonove/vexx/blob/main/docs/arch/Workbench.md), «Разделение Service/Component / Element / State». В `@tuidom/elements` остаются только виджеты общего назначения — чей публичный API не упоминает понятий Vexx.
 
 ## OverlayLayer + pointerPolicy (инвариант)
 `OverlayLayer` — overlay-менеджер с session API (`createSession`/`openPopupSession`): единый lifecycle popup/dialog/quick-open, политики закрытия, restore-focus, якорное позиционирование с clamp/flip по экрану.

@@ -11,6 +11,6 @@
         "verbatimModuleSyntax": true,
         "types": ["node"]
     },
-    "include": ["src", "demos", "scripts"],
-    "exclude": ["node_modules", "dist"]
+    "include": ["packages/*/src", "demos", "scripts"],
+    "exclude": ["node_modules", "packages/*/dist"]
 }

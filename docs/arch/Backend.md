@@ -1,6 +1,6 @@
 # Backend/
 
-Слой движка TUIDom (пакет `@tuidom/all`). Хост-приложение — [Vexx](https://github.com/tihonove/vexx).
+Слой движка TUIDom (монорепа пакетов `@tuidom/*`). Хост-приложение — [Vexx](https://github.com/tihonove/vexx).
 
 Абстракция терминального I/O. Определяет интерфейс бэкенда (onInput, onResize, flush, setup, teardown) и три реализации: реальную `NodeTerminalBackend` (Node.js stdin/stdout, Kitty protocol, alternate screen), in-memory `MockTerminalBackend` для тестов (sendKey DSL, screenToString) и `HeadlessCaptureBackend` для `--headless`-режима.
 

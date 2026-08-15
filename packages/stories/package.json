@@ -1,0 +1,17 @@
+{
+    "name": "@tuidom/stories",
+    "version": "0.1.0",
+    "private": true,
+    "type": "module",
+    "description": "Stories и перф-бенчи виджетов. Не публикуется: контент для storybook-прототипера и vitest bench.",
+    "exports": {
+        "./package.json": "./package.json",
+        "./*.js": "./src/*.ts",
+        "./*": "./src/*.ts"
+    },
+    "dependencies": {
+        "@tuidom/core": "*",
+        "@tuidom/elements": "*",
+        "@tuidom/testing": "*"
+    }
+}

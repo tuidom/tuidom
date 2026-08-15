@@ -67,8 +67,8 @@ mouseenter/mouseleave/blur/focus — слушатели видят его кон
 
 `StyleColor = number | имя токена`. Таблицы токен→число каскадируют по дереву
 (`setStyleVars`, обычно только на корне), дно цепочки — `STYLE_TOKEN_DEFAULTS`
-(`src/dom/styles/styleTokens.ts`) — **единственное место RGB-литералов
-tuidom**. Правило: токен, на который ссылается виджет src/ui, обязан иметь
+(`packages/core/src/dom/styles/styleTokens.ts`) — **единственное место RGB-литералов
+tuidom**. Правило: токен, на который ссылается виджет elements, обязан иметь
 дефолт там — иначе тесты/stories без хостовой таблицы упадут fail-fast'ом.
 
 - Имена — в конвенции color id VS Code (`"list.activeSelectionBackground"`);
@@ -130,6 +130,6 @@ standalone-рендеры tuidom-виджетов живут на дефолта
 
 ## Метрика Н3
 
-Файлов src/ui с кастомным `render`: 25 → 22; главное — из render-кода
+Файлов elements с кастомным `render`: 25 → 22; главное — из render-кода
 полностью ушли state-ветвления цветов (кнопка, вкладки, пункты меню, строки
 списков) и пост-рендерные патчи: состояние → стиль разрешает ядро.

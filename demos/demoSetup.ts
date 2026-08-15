@@ -19,7 +19,6 @@ export const KITTY_DISABLE = "\x1b[<u";
 const isTmux = process.env.TMUX != null && process.env.TMUX !== "";
 
 export function wrapForTmux(sequence: string): string {
-    // eslint-disable-next-line no-control-regex
     const escaped = sequence.replace(/\x1b/g, "\x1b\x1b");
     return `\x1bPtmux;${escaped}\x1b\\`;
 }

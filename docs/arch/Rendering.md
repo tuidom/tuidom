@@ -1,6 +1,6 @@
 # Rendering/
 
-Слой движка TUIDom (пакет `@tuidom/all`). Хост-приложение — [Vexx](https://github.com/tihonove/vexx).
+Слой движка TUIDom (монорепа пакетов `@tuidom/*`). Хост-приложение — [Vexx](https://github.com/tihonove/vexx).
 
 Вывод на экран: двойная буферизация, diff, минимальные ANSI-последовательности. Модель ячейки, 2D-матрица с diff-алгоритмом, высокоуровневое API рисования (`drawText`/`fill`/`clip`) и генератор ANSI escape-последовательностей для flush в stdout.
 

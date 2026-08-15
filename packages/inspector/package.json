@@ -1,0 +1,35 @@
+{
+    "name": "@tuidom/inspector",
+    "version": "0.1.0",
+    "type": "module",
+    "description": "Experimental terminal UI DOM — WebSocket inspector for devtools/e2e (hand-written RFC6455, zero-dep). API is unstable.",
+    "license": "MIT",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/tuidom/tuidom.git",
+        "directory": "packages/inspector"
+    },
+    "engines": {
+        "node": ">=24.0.0"
+    },
+    "keywords": [
+        "tui",
+        "terminal",
+        "ui",
+        "dom",
+        "inspector",
+        "devtools"
+    ],
+    "files": [
+        "dist"
+    ],
+    "exports": {
+        "./package.json": "./package.json",
+        "./*.js": "./src/*.ts",
+        "./*": "./src/*.ts"
+    },
+    "dependencies": {
+        "@tuidom/core": "0.1.0",
+        "@tuidom/elements": "0.1.0"
+    }
+}

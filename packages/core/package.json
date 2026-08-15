@@ -1,0 +1,29 @@
+{
+    "name": "@tuidom/core",
+    "version": "0.1.0",
+    "type": "module",
+    "description": "Experimental terminal UI DOM — core: element tree, flex layout, grid rendering, input parsing. API is unstable.",
+    "license": "MIT",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/tuidom/tuidom.git",
+        "directory": "packages/core"
+    },
+    "engines": {
+        "node": ">=24.0.0"
+    },
+    "keywords": [
+        "tui",
+        "terminal",
+        "ui",
+        "dom"
+    ],
+    "files": [
+        "dist"
+    ],
+    "exports": {
+        "./package.json": "./package.json",
+        "./*.js": "./src/*.ts",
+        "./*": "./src/*.ts"
+    }
+}

@@ -12,8 +12,8 @@
  * See: https://invisible-island.net/xterm/ctlseqs/ctlseqs.html#h2-Mouse-Tracking
  */
 
-import { MOUSE_TRACKING_ALL_ENABLE, MOUSE_TRACKING_DISABLE } from "../src/input/mouseTracking.ts";
-import { tokenize } from "../src/input/tokenize.ts";
+import { MOUSE_TRACKING_ALL_ENABLE, MOUSE_TRACKING_DISABLE } from "@tuidom/core/input/mouseTracking";
+import { tokenize } from "@tuidom/core/input/tokenize";
 
 import { addCleanup, exitOnCtrlCToken, stdin, stdout, writePassthrough } from "./demoSetup.ts";
 

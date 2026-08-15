@@ -1,0 +1,13 @@
+{
+    "name": "@tuidom/demos",
+    "version": "0.1.0",
+    "private": true,
+    "type": "module",
+    "description": "Standalone демо-хосты для ручного прогона (npm run demo, demo:inspect, …). Не публикуется.",
+    "dependencies": {
+        "@tuidom/core": "*",
+        "@tuidom/elements": "*",
+        "@tuidom/inspector": "*",
+        "@tuidom/terminal-backend": "*"
+    }
+}
