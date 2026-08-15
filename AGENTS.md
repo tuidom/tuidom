@@ -10,7 +10,7 @@ TUIDom — DOM-подобный движок терминального UI (вы
   - `testing/` — публикуемый тест-харнесс (`TestApp`, `renderElement`, `expectScreen`, `mockTerminalBackend`; палитра — снапшот Dark+ в `darkPlusStyleVars.ts`, регенерируется из vexx; `storyTypes`/`perfFixtures` публикуются — их тянет vexx);
   - `stories/` — **приватный**: все `*.stories.ts`, перф-бенчи, демо-виджеты (`FocusableBox`, `WASDScrollableElement`).
 - `demos/` — приватный воркспейс: standalone-хосты (`npm run demo`, `demo:inspect`, …).
-- `docs/` — LAYOUT.md, STYLES.md, arch/, TuidomContracts.md.
+- `docs/` — LAYOUT.md, STYLES.md (внутренние спеки/ADR), arch/, TODO/ (задачи «сделать потом»). Пользовательская дока — `GUIDE.md` в корне (англ.).
 - `scripts/build-package.mjs` — сборка/упаковка (`npm run build` / `npm run pack`); `scripts/set-version.mjs` — lockstep-подъём версий.
 
 # Правила

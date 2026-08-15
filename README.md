@@ -10,6 +10,9 @@ grid rendering with ANSI diffing, keyboard/mouse input parsing (incl. Kitty
 protocol), focus management, capture/bubble events, widgets (lists, trees,
 menus, inputs, quick pick), and a WebSocket inspector for devtools/e2e.
 
+📖 **Full usage guide: [GUIDE.md](./GUIDE.md)** — concepts, layout, styling,
+events, backends, testing. Internal specs (in Russian) live in [docs/](./docs/).
+
 Ships as a set of packages (lockstep-versioned) from this monorepo:
 
 | Package | What's inside |
