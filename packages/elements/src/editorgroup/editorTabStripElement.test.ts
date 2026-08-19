@@ -113,6 +113,19 @@ describe("EditorTabStripElement", () => {
 
             expect(onClose).toHaveBeenCalledWith(0);
         });
+
+        it("onTabContextMenu fires with the tab index and the screen anchor", () => {
+            const strip = new EditorTabStripElement();
+            const onTabContextMenu = vi.fn();
+            strip.onTabContextMenu = onTabContextMenu;
+            strip.setTabs(makeTabs("a.ts", "b.ts"));
+            strip.activeIndex = 0;
+
+            const items = strip.getItemElements();
+            items[1].onContextMenu?.(12, 4);
+
+            expect(onTabContextMenu).toHaveBeenCalledWith(1, 12, 4);
+        });
     });
 
     describe("setTabs update", () => {

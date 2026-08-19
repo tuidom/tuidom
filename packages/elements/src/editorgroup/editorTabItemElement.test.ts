@@ -1,6 +1,6 @@
 import { packRgb } from "@tuidom/core/common/colorUtils";
 import { BoxConstraints, Offset, Point, Size } from "@tuidom/core/common/geometryPromitives";
-import { TUIMouseEvent } from "@tuidom/core/dom/events/tuiMouseEvent";
+import { TUIContextMenuEvent, TUIMouseEvent } from "@tuidom/core/dom/events/tuiMouseEvent";
 import type { MockTerminalBackend } from "@tuidom/testing/mockTerminalBackend";
 import { renderElement } from "@tuidom/testing/renderElement";
 import { describe, expect, it, vi } from "vitest";
@@ -350,6 +350,94 @@ describe("EditorTabItemElement", () => {
 
             expect(onClose).toHaveBeenCalledOnce();
             expect(onActivate).not.toHaveBeenCalled();
+        });
+
+        it("right click on main area neither activates nor closes", () => {
+            const tab = new EditorTabItemElement("file.ts", tsIcon.icon, tsIcon.color);
+            const onClose = vi.fn();
+            const onActivate = vi.fn();
+            tab.onClose = onClose;
+            tab.onActivate = onActivate;
+
+            tab.localPosition = new Offset(0, 0);
+            tab.layout(BoxConstraints.tight(new Size(tab.getMaxIntrinsicWidth(1), 1)));
+
+            const event = new TUIMouseEvent("click", {
+                button: "right",
+                screenX: 3,
+                screenY: 0,
+                localX: 3,
+                localY: 0,
+            });
+            tab.dispatchEvent(event);
+
+            expect(onActivate).not.toHaveBeenCalled();
+            expect(onClose).not.toHaveBeenCalled();
+        });
+
+        it("right click on the close button does not close the tab", () => {
+            const tab = new EditorTabItemElement("file.ts", tsIcon.icon, tsIcon.color);
+            const onClose = vi.fn();
+            tab.onClose = onClose;
+
+            const w = tab.getMaxIntrinsicWidth(1);
+            tab.localPosition = new Offset(0, 0);
+            tab.layout(BoxConstraints.tight(new Size(w, 1)));
+
+            const closeX = w - 1 - 1; // paddingRight=1, close char len=1
+            const event = new TUIMouseEvent("click", {
+                button: "right",
+                screenX: closeX,
+                screenY: 0,
+                localX: closeX,
+                localY: 0,
+            });
+            tab.dispatchEvent(event);
+
+            expect(onClose).not.toHaveBeenCalled();
+        });
+    });
+
+    describe("context menu", () => {
+        it("contextmenu event calls onContextMenu with the screen anchor", () => {
+            const tab = new EditorTabItemElement("file.ts", tsIcon.icon, tsIcon.color);
+            const onContextMenu = vi.fn();
+            tab.onContextMenu = onContextMenu;
+
+            tab.localPosition = new Offset(0, 0);
+            tab.layout(BoxConstraints.tight(new Size(tab.getMaxIntrinsicWidth(1), 1)));
+
+            tab.dispatchEvent(
+                new TUIContextMenuEvent({
+                    trigger: "mouse",
+                    button: "right",
+                    screenX: 7,
+                    screenY: 2,
+                    localX: 3,
+                    localY: 0,
+                }),
+            );
+
+            expect(onContextMenu).toHaveBeenCalledWith(7, 2);
+        });
+
+        it("survives a contextmenu with no listener attached", () => {
+            const tab = new EditorTabItemElement("file.ts", tsIcon.icon, tsIcon.color);
+            tab.localPosition = new Offset(0, 0);
+            tab.layout(BoxConstraints.tight(new Size(tab.getMaxIntrinsicWidth(1), 1)));
+
+            expect(() => {
+                tab.dispatchEvent(
+                    new TUIContextMenuEvent({
+                        trigger: "mouse",
+                        button: "right",
+                        screenX: 0,
+                        screenY: 0,
+                        localX: 0,
+                        localY: 0,
+                    }),
+                );
+            }).not.toThrow();
         });
     });
 

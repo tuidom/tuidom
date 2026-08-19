@@ -27,6 +27,12 @@ export class EditorTabStripElement extends TUIElement {
 
     public onTabActivate: ((index: number) => void) | null = null;
     public onTabClose: ((index: number) => void) | null = null;
+    /**
+     * Правый клик по вкладке: индекс вкладки под курсором и якорь меню в
+     * экранных координатах. Виджет только сигналит — меню собирает приложение
+     * (как {@link TreeViewElement.onContextMenu}).
+     */
+    public onTabContextMenu: ((index: number, screenX: number, screenY: number) => void) | null = null;
 
     public constructor() {
         super();
@@ -94,6 +100,7 @@ export class EditorTabStripElement extends TUIElement {
                 const index = i;
                 item.onActivate = () => this.onTabActivate?.(index);
                 item.onClose = () => this.onTabClose?.(index);
+                item.onContextMenu = (screenX, screenY) => this.onTabContextMenu?.(index, screenX, screenY);
             }
 
             newItems.push(item);

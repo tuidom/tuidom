@@ -1,6 +1,6 @@
 import { BoxConstraints, Size } from "@tuidom/core/common/geometryPromitives";
 import { StyleFlags } from "@tuidom/core/common/styleFlags";
-import type { TUIMouseEvent } from "@tuidom/core/dom/events/tuiMouseEvent";
+import type { TUIContextMenuEvent, TUIMouseEvent } from "@tuidom/core/dom/events/tuiMouseEvent";
 import { RenderContext, TUIElement } from "@tuidom/core/dom/tuiElement";
 
 const CLOSE_CHAR = "×";
@@ -22,6 +22,8 @@ export class EditorTabItemElement extends TUIElement {
 
     public onActivate: (() => void) | null = null;
     public onClose: (() => void) | null = null;
+    /** Правый клик по вкладке — якорь в экранных координатах курсора. */
+    public onContextMenu: ((screenX: number, screenY: number) => void) | null = null;
 
     public constructor(
         label: string,
@@ -40,6 +42,11 @@ export class EditorTabItemElement extends TUIElement {
 
         this.addEventListener("click", (event) => {
             const mouseEvent = event;
+            // Активируют и закрывают вкладку только левая и средняя кнопки: правый
+            // клик обязан лишь открыть контекстное меню, не трогая ни активную
+            // вкладку, ни крестик (VS Code так же). Гард — как у остальных
+            // виджетов пакета (treeViewElement, listViewElement, quickPickElement).
+            if (mouseEvent.button !== "left" && mouseEvent.button !== "middle") return;
             // Middle click closes the tab regardless of where it lands (VSCode behaviour).
             if (mouseEvent.button === "middle") {
                 this.onClose?.();
@@ -51,6 +58,13 @@ export class EditorTabItemElement extends TUIElement {
             } else {
                 this.onActivate?.();
             }
+        });
+
+        // Ядро синтезирует "contextmenu" из правого клика (contextMenuEventSource);
+        // вкладка только сигналит наружу — меню собирает приложение.
+        this.addEventListener("contextmenu", (event) => {
+            const contextMenuEvent = event as TUIContextMenuEvent;
+            this.onContextMenu?.(contextMenuEvent.screenX, contextMenuEvent.screenY);
         });
 
         this.addEventListener("mouseenter", () => {
