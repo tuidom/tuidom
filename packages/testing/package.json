@@ -1,6 +1,6 @@
 {
     "name": "@tuidom/testing",
-    "version": "0.1.0",
+    "version": "0.2.0",
     "type": "module",
     "description": "Experimental terminal UI DOM — test harness: TestApp, renderElement, expectScreen, mock terminal backend. API is unstable.",
     "license": "MIT",
@@ -28,7 +28,7 @@
         "./*": "./src/*.ts"
     },
     "dependencies": {
-        "@tuidom/core": "0.1.0",
-        "@tuidom/elements": "0.1.0"
+        "@tuidom/core": "0.2.0",
+        "@tuidom/elements": "0.2.0"
     }
 }

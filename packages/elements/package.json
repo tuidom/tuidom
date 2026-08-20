@@ -1,6 +1,6 @@
 {
     "name": "@tuidom/elements",
-    "version": "0.1.0",
+    "version": "0.2.0",
     "type": "module",
     "description": "Experimental terminal UI DOM — widgets: lists, trees, menus, inputs, quick pick. API is unstable.",
     "license": "MIT",
@@ -28,6 +28,6 @@
         "./*": "./src/*.ts"
     },
     "dependencies": {
-        "@tuidom/core": "0.1.0"
+        "@tuidom/core": "0.2.0"
     }
 }

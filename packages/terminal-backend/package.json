@@ -1,6 +1,6 @@
 {
     "name": "@tuidom/terminal-backend",
-    "version": "0.1.0",
+    "version": "0.2.0",
     "type": "module",
     "description": "Experimental terminal UI DOM — real terminal backend for Node (tty, ANSI diffing, Kitty protocol). API is unstable.",
     "license": "MIT",
@@ -28,6 +28,6 @@
         "./*": "./src/*.ts"
     },
     "dependencies": {
-        "@tuidom/core": "0.1.0"
+        "@tuidom/core": "0.2.0"
     }
 }
