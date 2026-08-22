@@ -10,10 +10,14 @@ import { RenderContext, TUIElement } from "@tuidom/core/dom/tuiElement";
 
 import { InputElement } from "../inputbox/inputElement.ts";
 
-// ─── Styles ─────────────────────────────────────────────────────────────────
-
+// ─── Layout ─────────────────────────────────────────────────────────────────
+// [│(0)][pad(1)][контент(2…w-3)][pad(w-2)][│(w-1)]
+/** Паддинг между левой рамкой и контентом ряда (не путать с самой рамкой). */
+const LEFT_PAD = 1;
 /** Паддинг между контентом ряда и правой рамкой (не путать с самой рамкой). */
 const RIGHT_PAD = 1;
+/** Колонка старта контента — одна на строку запроса, сообщение и строки списка. */
+const CONTENT_X = BORDER_THICKNESS + LEFT_PAD;
 
 // ─── Public types ────────────────────────────────────────────────────────────
 
@@ -376,14 +380,11 @@ export class QuickPickElement extends TUIElement {
         this.scrollOffset = Math.min(this.scrollOffset, maxScroll);
         this.ensureVisible(this.selectedIndexValue);
 
-        // Position InputElement inside the top border, padded by the border on each side.
-        const inputWidth = Math.max(0, size.width - BORDER_THICKNESS * 2);
-        this.layoutChild(
-            this.inputElement,
-            BORDER_THICKNESS,
-            BORDER_THICKNESS,
-            BoxConstraints.tight(new Size(inputWidth, 1)),
-        );
+        // Строка запроса стоит в той же контентной колонке, что сообщение и строки
+        // списка, и симметрично отбита от правой рамки — иначе текст запроса ехал
+        // бы на символ левее результатов и липнул к рамке справа.
+        const inputWidth = Math.max(0, size.width - CONTENT_X - RIGHT_PAD - BORDER_THICKNESS);
+        this.layoutChild(this.inputElement, CONTENT_X, BORDER_THICKNESS, BoxConstraints.tight(new Size(inputWidth, 1)));
 
         return size;
     }
@@ -491,11 +492,12 @@ export class QuickPickElement extends TUIElement {
             fg: this.styleVar("quickPick.border"),
             bg: this.styleVar("quickInput.background"),
         });
-        const avail = Math.max(0, w - 3);
+        const contentRight = w - BORDER_THICKNESS - RIGHT_PAD; // exclusive, inside right border
+        const avail = Math.max(0, contentRight - CONTENT_X);
         const text =
             new DisplayLine(message.text).displayWidth <= avail ? message.text : truncateEnd(message.text, avail);
         context.drawText(
-            2,
+            CONTENT_X,
             rowY,
             text,
             { fg: message.fg, bg: this.styleVar("quickInput.background") },
@@ -532,7 +534,7 @@ export class QuickPickElement extends TUIElement {
             bg: this.styleVar("quickInput.background"),
         });
 
-        let x = 2;
+        let x = CONTENT_X;
 
         // ── Icon column ───────────────────────────────────────────────────────
         if (hasIcons) {

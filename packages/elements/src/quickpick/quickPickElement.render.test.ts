@@ -418,7 +418,7 @@ describe("QuickPickElement — snapshot", () => {
             backend,
             screen`
                 ╭──────────────────╮
-                │Go to file...     │
+                │ Go to file...    │
                 ╰──────────────────╯
             `,
         );
@@ -433,13 +433,44 @@ describe("QuickPickElement — snapshot", () => {
             backend,
             screen`
                 ╭──────────────────╮
-                │Search            │
+                │ Search           │
                 ├──────────────────┤
                 │ Alpha            │
                 │ Beta             │
                 ╰──────────────────╯
             `,
         );
+    });
+
+    it("query, validation message and item rows all start in the same column", () => {
+        const picker = new QuickPickElement();
+        picker.setQuery("cfg");
+        picker.validationMessage = "Name is taken";
+        picker.items = [{ label: "Alpha" }, { label: "Beta" }];
+        const backend = renderPicker(picker, 20);
+        expectScreen(
+            backend,
+            screen`
+                ╭──────────────────╮
+                │ cfg              │
+                │ Name is taken    │
+                ├──────────────────┤
+                │ Alpha            │
+                │ Beta             │
+                ╰──────────────────╯
+            `,
+        );
+    });
+
+    it("a long validation message stops at the right padding, like item rows do", () => {
+        const picker = new QuickPickElement();
+        picker.validationMessage = "This message is far too long to fit";
+        picker.items = [{ label: "Alpha" }];
+        const backend = renderPicker(picker, 20);
+        // Правая колонка контента — та же, что у строк списка: w - 3.
+        expect(backend.getTextAt(new Point(17, 2), 1)).not.toBe(" ");
+        expect(backend.getTextAt(new Point(18, 2), 1)).toBe(" ");
+        expect(backend.getTextAt(new Point(19, 2), 1)).toBe("│");
     });
 });
 
