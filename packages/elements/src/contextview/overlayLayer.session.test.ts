@@ -145,7 +145,7 @@ describe("OverlayLayer — hasKeyboardCapturingOverlay", () => {
         expect(app.root.overlayLayer.hasKeyboardCapturingOverlay()).toBe(false);
     });
 
-    it("close-on-outside session captures the keyboard (quickpick / context menus)", () => {
+    it("close-on-outside session captures the keyboard (pickers / context menus)", () => {
         const { app, menu } = makeApp();
         app.root.overlayLayer.createSession(menu, new Point(2, 2), {
             visible: true,

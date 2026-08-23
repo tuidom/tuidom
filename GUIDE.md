@@ -355,7 +355,6 @@ will be generated from source — see `docs/TODO/ApiReferenceGeneration.md`.
 | `ButtonElement` | push button |
 | `InputElement` | single-line text input |
 | `SelectBoxElement` | dropdown select |
-| `QuickPickElement` | VS Code-style quick pick (filter input + list) |
 | `CompletionListElement` / `CompletionWidgetElement` / `CompletionDetailsElement` | completion popup family |
 | **Lists** | |
 | `ListViewElement` | virtualized list of element rows (100k rows ≈ 1 ms/frame); cursor, multi-select, typeahead, collapsible hierarchy |
