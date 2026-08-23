@@ -11,7 +11,7 @@ import type { StyleVarScope } from "./tuiStyle.ts";
  * Имена — в конвенции color id VS Code ("list.activeSelectionBackground"),
  * чтобы хост перекрывал дефолты ключами своей темы без функций-мостов;
  * tuidom-специфика без темного эквивалента — под собственным именем
- * ("menu.shortcutForeground", "quickPick.*", "titledPanel.*", "menuBar.*").
+ * ("menu.shortcutForeground", "titledPanel.*", "menuBar.*").
  * Значения — только конкретные числа (packed RGB | DEFAULT_COLOR); сентинелы
  * INHERITED_* в таблицах запрещены (проверяется в setStyleVars).
  *
@@ -90,14 +90,6 @@ export const STYLE_TOKEN_DEFAULTS = {
     "sash.hoverBorder": packRgb(0, 120, 215),
 
     // ── Квик-пик ──
-    "quickInput.foreground": packRgb(204, 204, 204),
-    "quickInput.background": packRgb(37, 37, 38),
-    "quickPick.border": packRgb(83, 83, 83),
-    "quickPick.badgeForeground": packRgb(150, 190, 100),
-    "quickPick.shortcutForeground": packRgb(128, 128, 128),
-    "quickPick.hintForeground": packRgb(100, 150, 200),
-    "quickPick.titleForeground": packRgb(230, 230, 230),
-    "quickPick.promptForeground": packRgb(140, 140, 140),
     descriptionForeground: packRgb(125, 125, 125),
 
     // ── Автодополнение ──

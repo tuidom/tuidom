@@ -74,7 +74,7 @@ tuidom**. Правило: токен, на который ссылается в�
 - Незнакомый токен — **throw с именем класса и токена** на первом же кадре
   (наш fail-fast; опечатки хостовых ключей компилятор не ловит — типизирован
   только автокомплит по дефолтам).
-- Painter-виджеты (editor, terminal, quickpick, деревья) читают токены в render
+- Painter-виджеты (editor, terminal, деревья) читают токены в render
   через `styleVar(name)`; `styleVar(name, fallback)` — для токенов, чьё
   отсутствие ЛЕГАЛЬНО означает «взять из каскада» (`editorGutter.background` →
   фон редактора). `resolveColor(color)` резолвит StyleColor из ДАННЫХ
