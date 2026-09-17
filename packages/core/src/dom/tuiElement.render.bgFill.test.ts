@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { DEFAULT_COLOR, packRgb } from "../common/colorUtils.ts";
 import { BoxConstraints, Offset, Point, Rect, Size } from "../common/geometryPromitives.ts";
+import { StyleFlags } from "../common/styleFlags.ts";
 import { TerminalScreen } from "../rendering/terminalScreen.ts";
 
 import { INHERITED_FG, ROOT_STYLE_CONTEXT } from "./styles/tuiStyle.ts";
@@ -106,6 +107,26 @@ describe("TUIElement.render — заливка собственного фона
         expect(screen.getCell(new Point(6, 3)).bg).toBe(bg);
         expect(screen.getCell(new Point(7, 3)).bg).toBe(DEFAULT_COLOR);
         expect(screen.getCell(new Point(2, 2)).bg).toBe(DEFAULT_COLOR);
+    });
+
+    it("заливка гасит флаги стиля под собой", () => {
+        // Оверлей (попап, диалог) ложится поверх уже нарисованного кадра: под
+        // ним может лежать подчёркнутый диагностикой текст редактора. Своя
+        // заливка — новая поверхность, чужая волна сквозь неё не проступает.
+        const root = new ContainerElement();
+        root.setAsRoot();
+        root.style = { bg: packRgb(30, 30, 30) };
+
+        const size = new Size(20, 6);
+        const screen = new TerminalScreen(size);
+        const ctx = new RenderContext(screen, new Offset(0, 0), new Rect(new Point(0, 0), size));
+        ctx.drawText(0, 0, "xxxxx", { style: StyleFlags.Undercurl });
+
+        root.layout(BoxConstraints.tight(size));
+        root.performStyleResolution(ROOT_STYLE_CONTEXT);
+        root.render(ctx);
+
+        expect(screen.getCell(new Point(0, 0)).style).toBe(StyleFlags.None);
     });
 
     it("appliedStyle отдаёт сырые цвета (токен до резолва)", () => {

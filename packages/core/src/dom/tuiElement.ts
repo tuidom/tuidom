@@ -1,6 +1,7 @@
 import { DEFAULT_COLOR } from "../common/colorUtils.ts";
 import { DisplayLine } from "../common/displayLine.ts";
 import { BoxConstraints, Offset, Point, Rect, Size } from "../common/geometryPromitives.ts";
+import { StyleFlags } from "../common/styleFlags.ts";
 import type { DamageList } from "../rendering/damage.ts";
 import type { CellPatch, ReadonlyCellData } from "../rendering/grid.ts";
 import { TerminalScreen } from "../rendering/terminalScreen.ts";
@@ -60,6 +61,16 @@ export class RenderContext {
         return new RenderContext(this.canvas, this.offset, this.clipRect.intersect(rect));
     }
 
+    /**
+     * Патчит ячейку: заданные поля перезаписываются, опущенные остаются
+     * прежними (так проходы-подсветки кладут один `bg`, не трогая глиф).
+     *
+     * Непрозрачная запись ячейки — та, что кладёт свой `char`, — обязана
+     * задавать и `style`: иначе ячейка донашивает атрибуты того, кто рисовал
+     * здесь раньше в этом же кадре, и оверлей поверх подчёркнутого текста
+     * получает чужую волну (`drawText`/`drawBox`/{@link TUIElement.paintOwnBackground}
+     * так и делают).
+     */
     public setCell(x: number, y: number, cell: CellPatch): void {
         const screenX = x + this.offset.dx;
         const screenY = y + this.offset.dy;
@@ -91,6 +102,9 @@ export class RenderContext {
     /**
      * Render a text string at (x, y), handling wide chars, tabs, combining marks and emoji.
      * Each column within [startCol, startCol + maxWidth) is rendered.
+     *
+     * Каждая записанная ячейка получает ПОЛНЫЙ стиль: не переданные флаги —
+     * {@link StyleFlags.None}, а не то, что лежало в ячейке до текста.
      *
      * @param x       Left screen column (local coordinates)
      * @param y       Screen row (local coordinates)
@@ -129,11 +143,12 @@ export class RenderContext {
             const w = slot ? slot.displayWidth : 1;
             const slotStyle = slot && options?.getStyle ? options.getStyle(slot.offset) : undefined;
             const resolvedStyle = slotStyle !== undefined ? { ...style, ...slotStyle } : style;
+            const cellStyle = resolvedStyle?.style ?? StyleFlags.None;
             if (w === 2 && col + 1 >= maxWidth) {
-                this.setCell(x + col, y, { char: " ", width: 1, ...resolvedStyle });
+                this.setCell(x + col, y, { char: " ", width: 1, ...resolvedStyle, style: cellStyle });
                 col++;
             } else {
-                this.setCell(x + col, y, { char, width: w, ...resolvedStyle });
+                this.setCell(x + col, y, { char, width: w, ...resolvedStyle, style: cellStyle });
                 col += w;
             }
         }
@@ -156,6 +171,10 @@ export class RenderContext {
      * @param options fg/bg, пресет `style` (по умолчанию {@link BORDER_ROUNDED} —
      *                канонический стиль оверлеев Vexx), `fill` (залить фон внутри
      *                рамки), `separators` (ряды-разделители)
+     *
+     * Как и {@link drawText}, кладёт ячейки целиком: флаги стиля сбрасываются в
+     * {@link StyleFlags.None}. Рамка — непрозрачная поверхность (обычно оверлей),
+     * и подчёркивание текста под ней сквозь неё проступать не должно.
      */
     public drawBox(
         x: number,
@@ -170,16 +189,17 @@ export class RenderContext {
             separators?: readonly number[];
         } = {},
     ): void {
-        const style = options.style ?? BORDER_ROUNDED;
+        const border = options.style ?? BORDER_ROUNDED;
         const fg = options.fg;
         const bg = options.bg;
+        const style = StyleFlags.None;
         const right = x + width - 1;
         const bottom = y + height - 1;
 
         if (options.fill === true) {
             for (let yy = y; yy <= bottom; yy++) {
                 for (let xx = x; xx <= right; xx++) {
-                    this.setCell(xx, yy, { char: " ", fg, bg });
+                    this.setCell(xx, yy, { char: " ", fg, bg, style });
                 }
             }
         }
@@ -187,26 +207,26 @@ export class RenderContext {
         const separators = new Set(options.separators);
 
         // Top border.
-        this.setCell(x, y, { char: style.topLeft, fg, bg });
-        this.setCell(right, y, { char: style.topRight, fg, bg });
-        for (let xx = x + 1; xx < right; xx++) this.setCell(xx, y, { char: style.horizontal, fg, bg });
+        this.setCell(x, y, { char: border.topLeft, fg, bg, style });
+        this.setCell(right, y, { char: border.topRight, fg, bg, style });
+        for (let xx = x + 1; xx < right; xx++) this.setCell(xx, y, { char: border.horizontal, fg, bg, style });
 
         // Side borders (+ separator T-connectors).
         for (let yy = y + 1; yy < bottom; yy++) {
             if (separators.has(yy - y)) {
-                this.setCell(x, yy, { char: style.leftJoint, fg, bg });
-                this.setCell(right, yy, { char: style.rightJoint, fg, bg });
-                for (let xx = x + 1; xx < right; xx++) this.setCell(xx, yy, { char: style.horizontal, fg, bg });
+                this.setCell(x, yy, { char: border.leftJoint, fg, bg, style });
+                this.setCell(right, yy, { char: border.rightJoint, fg, bg, style });
+                for (let xx = x + 1; xx < right; xx++) this.setCell(xx, yy, { char: border.horizontal, fg, bg, style });
             } else {
-                this.setCell(x, yy, { char: style.vertical, fg, bg });
-                this.setCell(right, yy, { char: style.vertical, fg, bg });
+                this.setCell(x, yy, { char: border.vertical, fg, bg, style });
+                this.setCell(right, yy, { char: border.vertical, fg, bg, style });
             }
         }
 
         // Bottom border.
-        this.setCell(x, bottom, { char: style.bottomLeft, fg, bg });
-        this.setCell(right, bottom, { char: style.bottomRight, fg, bg });
-        for (let xx = x + 1; xx < right; xx++) this.setCell(xx, bottom, { char: style.horizontal, fg, bg });
+        this.setCell(x, bottom, { char: border.bottomLeft, fg, bg, style });
+        this.setCell(right, bottom, { char: border.bottomRight, fg, bg, style });
+        for (let xx = x + 1; xx < right; xx++) this.setCell(xx, bottom, { char: border.horizontal, fg, bg, style });
     }
 }
 
@@ -1271,6 +1291,11 @@ export class TUIElement {
      * считаются «задан»: это намеренная перезаливка цветом родителя (INHERITED_BG)
      * или инверсия (INHERITED_FG). Выход за границы невозможен — контекст
      * элемента уже клипован родителем.
+     *
+     * Заливка непрозрачна, поэтому кладёт ячейку целиком, вместе со сбросом
+     * флагов стиля: собственный фон — это новая поверхность, и атрибуты того,
+     * что нарисовано под ней раньше в этом кадре (подчёркивание диагностики под
+     * попапом, жирный токен под диалогом), на ней проступать не должны.
      */
     protected paintOwnBackground(context: RenderContext): void {
         if (this.appliedBgValue === undefined) return;
@@ -1278,7 +1303,7 @@ export class TUIElement {
         const { width, height } = this.layoutSize;
         for (let y = 0; y < height; y++) {
             for (let x = 0; x < width; x++) {
-                context.setCell(x, y, { char: " ", fg, bg });
+                context.setCell(x, y, { char: " ", fg, bg, style: StyleFlags.None });
             }
         }
     }
