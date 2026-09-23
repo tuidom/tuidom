@@ -180,8 +180,14 @@ export class TuiApplication {
                 }
             }
 
-            // Tab focus cycling (default behavior if not prevented, only on keydown)
-            if (notPrevented && event.key === "Tab" && event.type === "keydown" && this.focusManager) {
+            // Tab focus cycling (default behavior if not prevented, only on keydown).
+            // Обход фокуса — только у голого Tab и Shift+Tab: Ctrl+Tab, Alt+Tab и Meta+Tab
+            // это отдельные аккорды, и приложение вправе повесить на них своё. Если бы
+            // мы крутили кольцо и на них, то нерезолвнувшийся аккорд приложения (его
+            // `when` не прошёл — значит preventDefault никто не позвал) уводил бы фокус
+            // на случайный элемент. Shift здесь не модификатор аккорда, а направление.
+            const plainTab = !event.ctrlKey && !event.altKey && !event.metaKey;
+            if (notPrevented && event.key === "Tab" && event.type === "keydown" && plainTab && this.focusManager) {
                 const direction = event.shiftKey ? "backward" : "forward";
                 this.focusManager.cycleFocus(direction);
             }

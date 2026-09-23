@@ -305,3 +305,64 @@ describe("Focus: click moves focus to focusable element", () => {
         expect(box.isFocused).toBe(false);
     });
 });
+
+describe("Focus integration: Tab с модификаторами кольцо не крутит", () => {
+    // Ctrl+Tab / Alt+Tab / Meta+Tab — самостоятельные аккорды, а не «Tab с довеском».
+    // Приложение вешает на них своё (переключение вкладок и т.п.); если его биндинг не
+    // сработал, preventDefault никто не позвал — и раньше фокус уезжал на случайный
+    // элемент кольца. Shift — исключение: он не аккорд, а направление обхода.
+
+    it.each(["Ctrl+Tab", "Alt+Tab", "Meta+Tab", "Ctrl+Shift+Tab", "Ctrl+Alt+Tab"])(
+        "%s не двигает фокус с пустого кольца",
+        (key) => {
+            const { backend, boxes } = setupApp(3);
+
+            backend.sendKey(key);
+
+            expect(boxes.map((b) => b.isFocused)).toEqual([false, false, false]);
+        },
+    );
+
+    it.each(["Ctrl+Tab", "Alt+Tab", "Meta+Tab", "Ctrl+Shift+Tab"])("%s не сдвигает уже стоящий фокус", (key) => {
+        const { backend, boxes } = setupApp(3);
+
+        backend.sendKey("Tab");
+        expect(boxes[0].isFocused).toBe(true);
+
+        backend.sendKey(key);
+
+        expect(boxes[0].isFocused).toBe(true);
+        expect(boxes[1].isFocused).toBe(false);
+        expect(boxes[2].isFocused).toBe(false);
+    });
+
+    it("Ctrl+Tab по-прежнему доезжает до сфокусированного элемента как keydown", () => {
+        const { backend, boxes } = setupApp(3);
+        backend.sendKey("Tab");
+
+        const seen: { key: string; ctrlKey: boolean }[] = [];
+        boxes[0].addEventListener("keydown", (e) => {
+            seen.push({ key: e.key, ctrlKey: e.ctrlKey });
+        });
+
+        backend.sendKey("Ctrl+Tab");
+
+        expect(seen).toEqual([{ key: "Tab", ctrlKey: true }]);
+    });
+
+    it("голый Tab и Shift+Tab кольцо крутят по-прежнему", () => {
+        const { backend, boxes } = setupApp(3);
+
+        backend.sendKey("Tab");
+        expect(boxes[0].isFocused).toBe(true);
+
+        backend.sendKey("Ctrl+Tab");
+        expect(boxes[0].isFocused).toBe(true);
+
+        backend.sendKey("Tab");
+        expect(boxes[1].isFocused).toBe(true);
+
+        backend.sendKey("Shift+Tab");
+        expect(boxes[0].isFocused).toBe(true);
+    });
+});
