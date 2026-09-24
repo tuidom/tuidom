@@ -353,7 +353,7 @@ will be generated from source — see `docs/TODO/ApiReferenceGeneration.md`.
 | `TextBlockElement` | multi-line word-wrapped text, scrollable content |
 | **Controls** | |
 | `ButtonElement` | push button |
-| `InputElement` | single-line text input |
+| `InputElement` | single-line text input; `maskChar` renders every grapheme as that glyph (password field) |
 | `SelectBoxElement` | dropdown select |
 | `CompletionListElement` / `CompletionWidgetElement` / `CompletionDetailsElement` | completion popup family |
 | **Lists** | |
