@@ -13,7 +13,7 @@ export default defineConfig({
                 autoUpdate: true,
                 statements: 99.13,
                 branches: 99.51,
-                functions: 98.2,
+                functions: 98.21,
                 lines: 99.23,
             },
             reporter: ["text", "lcov", "json", "json-summary", "text-summary"],

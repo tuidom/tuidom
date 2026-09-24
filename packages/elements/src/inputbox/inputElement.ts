@@ -23,6 +23,14 @@ export class InputElement extends TUIElement {
     public readonly inputState: InputState;
     public placeholder: string | undefined = undefined;
     public showBorder = false;
+    /**
+     * Маска поля пароля: каждый графемный кластер значения рисуется этой
+     * строкой, сам текст на экран не попадает и не отдаётся инспектору.
+     * `undefined` — обычное поле. Модель (`inputState`) хранит настоящий текст:
+     * маска — это только представление, редактирование и `onChange` работают
+     * по-прежнему с реальным значением.
+     */
+    public maskChar: string | undefined = undefined;
     public onChange: ((value: string) => void) | undefined = undefined;
 
     private scrollX = 0;
@@ -36,13 +44,48 @@ export class InputElement extends TUIElement {
         this.style = { fg: "input.foreground", bg: "input.background" };
     }
 
-    /** Наблюдаемость для инспектора/e2e: текст, курсор, выделение, плейсхолдер. */
+    /**
+     * Наблюдаемость для инспектора/e2e: текст, курсор, выделение, плейсхолдер.
+     * Под маской (`maskChar`) отдаётся ровно то, что на экране, — секрет наружу
+     * не уходит; `cursorOffset` при этом тоже смещение в маске.
+     */
     public override inspectState(): Record<string, unknown> {
+        const view = this.displayView();
         return {
-            value: this.inputState.value,
-            cursorOffset: this.inputState.cursorOffset,
+            value: view.text,
+            cursorOffset: view.cursorOffset,
             hasSelection: this.inputState.hasSelection,
             showsPlaceholder: this.inputState.value.length === 0 && this.placeholder !== undefined,
+        };
+    }
+
+    /**
+     * Что рисуем и где в нарисованном стоят курсор и выделение.
+     *
+     * Без маски — сам текст и его же смещения. С маской — по одному
+     * {@link maskChar} на графемный кластер, а смещения пересчитаны в этот новый
+     * текст: курсор за N-й графемой стоит за N-й маской. Смещения считаем через
+     * длину самой маски, а не «одна графема = один символ», — маской может быть
+     * и многокодовый глиф.
+     */
+    private displayView(): { text: string; cursorOffset: number; selectionStart: number; selectionEnd: number } {
+        const state = this.inputState;
+        const mask = this.maskChar;
+        if (mask === undefined) {
+            return {
+                text: state.text,
+                cursorOffset: state.cursorOffset,
+                selectionStart: state.selectionStart,
+                selectionEnd: state.selectionEnd,
+            };
+        }
+        const slots = new DisplayLine(state.text).slots;
+        const toMask = (offset: number): number => slots.filter((slot) => slot.offset < offset).length * mask.length;
+        return {
+            text: mask.repeat(slots.length),
+            cursorOffset: toMask(state.cursorOffset),
+            selectionStart: toMask(state.selectionStart),
+            selectionEnd: toMask(state.selectionEnd),
         };
     }
 
@@ -71,8 +114,11 @@ export class InputElement extends TUIElement {
     public override render(context: RenderContext): void {
         const w = this.layoutSize.width;
         const h = this.layoutSize.height;
-        const text = this.inputState.text;
-        const cursorOffset = this.inputState.cursorOffset;
+        // Рисуем ПРЕДСТАВЛЕНИЕ значения: без маски это сам текст, под маской —
+        // её символы со смещениями, пересчитанными в них.
+        const view = this.displayView();
+        const text = view.text;
+        const cursorOffset = view.cursorOffset;
         const focused = this.isFocused;
 
         const contentXStart = this.showBorder ? 1 : 0;
@@ -115,7 +161,7 @@ export class InputElement extends TUIElement {
                 bg,
             });
         } else if (this.inputState.hasSelection) {
-            this.renderTextWithSelection(textContext, dl, text, contentXStart, contentY);
+            this.renderTextWithSelection(textContext, dl, text, view, contentXStart, contentY);
         } else {
             textContext.drawText(contentXStart - this.scrollX, contentY, text, { fg, bg });
         }
@@ -135,11 +181,14 @@ export class InputElement extends TUIElement {
         context: RenderContext,
         dl: DisplayLine,
         text: string,
+        view: { selectionStart: number; selectionEnd: number },
         contentXStart: number,
         contentY: number,
     ): void {
-        const selStart = this.inputState.selectionStart;
-        const selEnd = this.inputState.selectionEnd;
+        // Границы выделения берём из представления: под маской они смещения в
+        // ней, а `text`/`dl` — тоже она.
+        const selStart = view.selectionStart;
+        const selEnd = view.selectionEnd;
         const before = text.slice(0, selStart);
         const selected = text.slice(selStart, selEnd);
         const after = text.slice(selEnd);
