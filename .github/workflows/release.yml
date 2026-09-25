@@ -1,0 +1,59 @@
+name: Release
+
+# Публикация по тегу vX.Y.Z. Аутентификация — npm Trusted Publishing (OIDC):
+# токенов в секретах нет, npm сам обменивает id-token GitHub на право публикации,
+# provenance-аттестации при этом генерируются автоматически.
+# Доверенный публикатор в npm настроен на имя ИМЕННО этого файла — release.yml:
+# переименование файла сломает публикацию.
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # обязательно для OIDC-обмена
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          cache: npm
+      # Node 24 может приносить npm старее 11.5.1 — версии до неё OIDC не умеют.
+      - run: npm install -g npm@latest
+      - run: npm ci
+
+      # Тег обязан совпадать с lockstep-версией пакетов: иначе уедет не то, что помечено.
+      - name: Проверка соответствия тега версии пакетов
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          version=$(node -p "require('./packages/core/package.json').version")
+          if [ "$tag" != "$version" ]; then
+            echo "Тег $GITHUB_REF_NAME не совпадает с версией пакетов $version" >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_ENV"
+
+      - run: npm run typecheck
+      - run: npm run test
+      # Топологическая сборка → rewrite .d.ts → npm pack каждого → smoke шести tgz на голом node.
+      - run: npm run pack
+
+      # Публикуем строго tgz: в них exports уже на dist/, тогда как package.json в репо
+      # держит dev-exports на src/*.ts — publish из директории пакета дал бы сломанный пакет.
+      # Порядок топологический; уже опубликованную версию пропускаем, чтобы перезапуск
+      # упавшего релиза доводил дело до конца, а не падал на первом пакете.
+      - name: Публикация
+        run: |
+          for pkg in core elements terminal-backend headless-backend testing inspector; do
+            tgz="tuidom-$pkg-$version.tgz"
+            if npm view "@tuidom/$pkg@$version" version >/dev/null 2>&1; then
+              echo "@tuidom/$pkg@$version уже в реестре — пропускаю"
+              continue
+            fi
+            echo "публикую $tgz"
+            npm publish "$tgz" --access public
+          done

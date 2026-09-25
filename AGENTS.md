@@ -30,4 +30,8 @@ TUIDom — DOM-подобный движок терминального UI (вы
 
 # Публикация
 
-`npm run set-version X.Y.Z` (lockstep, правит и внутренние пины) → `npm run pack` (топологическая сборка → rewrite .d.ts → npm pack каждого → smoke шести tgz на голом node) → публиковать **строго tgz** (в них exports уже на dist; publish из директории пакета взял бы dev-exports): `for t in tuidom-*.tgz; do npm publish "$t" --access public; done`.
+Релиз едет **по тегу**: `npm run set-version X.Y.Z` (lockstep, правит и внутренние пины) → коммит `release: X.Y.Z` через PR → тег `vX.Y.Z` на смердженном коммите (`git tag -a vX.Y.Z -m "TUIDom X.Y.Z" && git push origin vX.Y.Z`). Дальше `.github/workflows/release.yml` сам сверяет тег с версией пакетов, гоняет typecheck/тесты/`npm run pack` и публикует.
+
+- Аутентификация — npm Trusted Publishing (OIDC), токенов в секретах нет; provenance-аттестации генерируются автоматически. Доверенный публикатор в npm прописан на имя файла `release.yml` у каждого из шести пакетов — **переименование файла ломает публикацию** (и правится только пересозданием публикатора в UI npm, редактировать его нельзя).
+- Публикуется **строго tgz** (в них exports уже на dist; publish из директории пакета взял бы dev-exports на `src/*.ts` — сломанный пакет). Уже опубликованные версии цикл пропускает, поэтому перезапуск упавшего релиза доводит дело до конца.
+- Руками (если OIDC недоступен): `npm run pack`, затем `for t in tuidom-*.tgz; do npm publish "$t" --access public; done` — потребует OTP.
