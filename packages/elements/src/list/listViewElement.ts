@@ -594,8 +594,10 @@ export class ListViewElement extends ScrollableElement {
 
         // Курсор возвращается на прежнюю строку по id; если она пропала (скрыта,
         // свёрнута под родителя) — на ближайший оставшийся индекс, не прыгая наверх.
-        if (this.pendingCursorId !== null && this.visibleIndexById.has(this.pendingCursorId)) {
-            this.cursorIndex = this.visibleIndexById.get(this.pendingCursorId)!;
+        const pendingIndex =
+            this.pendingCursorId !== null ? this.visibleIndexById.get(this.pendingCursorId) : undefined;
+        if (pendingIndex !== undefined) {
+            this.cursorIndex = pendingIndex;
         } else if (out.length === 0) {
             this.cursorIndex = 0;
         } else {
@@ -658,8 +660,10 @@ export class ListViewElement extends ScrollableElement {
      * тогда новый последний ребёнок строки встаёт в самый хвост проекции.
      */
     private isProjectionTail(id: string): boolean {
-        // Вызывается при видимом родителе — проекция материализована и непуста.
-        let cursor: ListRow | undefined = this.visibleRows![this.visibleRows!.length - 1];
+        // Вызывается при видимом родителе — проекция материализована и непуста,
+        // так что ensureProjection здесь просто отдаёт готовый массив.
+        const rows = this.ensureProjection();
+        let cursor: ListRow | undefined = rows[rows.length - 1];
         while (cursor) {
             if (cursor.id === id) return true;
             cursor = cursor.parentId !== null ? this.rowById.get(cursor.parentId) : undefined;
@@ -875,7 +879,7 @@ export class ListViewElement extends ScrollableElement {
         for (let i = 0; i < count; i++) {
             const idx = (start + i) % count;
             const label = rows[idx].label;
-            if (label !== undefined && label.toLowerCase().startsWith(prefix)) {
+            if (label?.toLowerCase().startsWith(prefix) === true) {
                 this.setSelectedIndex(idx);
                 return;
             }
@@ -884,7 +888,7 @@ export class ListViewElement extends ScrollableElement {
 
     private handleExpandOrMoveToChild(): void {
         const rows = this.ensureProjection();
-        const row = rows[this.cursorIndex];
+        const row = rows.at(this.cursorIndex);
         if (!row || !this.rowHasChildren(row.id)) return;
 
         if (this.collapsedIds.has(row.id)) {
@@ -897,7 +901,7 @@ export class ListViewElement extends ScrollableElement {
 
     private handleCollapseOrMoveToParent(): void {
         const rows = this.ensureProjection();
-        const row = rows[this.cursorIndex];
+        const row = rows.at(this.cursorIndex);
         if (!row) return;
 
         if (this.rowHasChildren(row.id) && !this.collapsedIds.has(row.id)) {
@@ -914,14 +918,14 @@ export class ListViewElement extends ScrollableElement {
 
     private activateCursorRow(): void {
         const rows = this.ensureProjection();
-        const row = rows[this.cursorIndex];
+        const row = rows.at(this.cursorIndex);
         if (!row) return;
         this.onActivate?.(row.element);
     }
 
     private toggleCursorRow(): void {
         const rows = this.ensureProjection();
-        const row = rows[this.cursorIndex];
+        const row = rows.at(this.cursorIndex);
         if (!row || !this.rowHasChildren(row.id)) return;
         this.toggleCollapsed(row.id);
     }

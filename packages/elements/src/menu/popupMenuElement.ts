@@ -241,7 +241,7 @@ export class PopupMenuElement extends TUIElement {
             if (current === this) return true;
             current = current.getParent();
         }
-        return this.child !== null && this.child.menu.ownsElement(target);
+        return this.child?.menu.ownsElement(target) === true;
     }
 
     /** Каскадно закрывает всю цепочку открытых подменю. */

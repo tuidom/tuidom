@@ -120,6 +120,8 @@ const CASES: ContainerCase[] = [
         name: "ScrollContainerElement",
         build: () => {
             const child = new ContentSizedElement();
+            // Контракт проверяется и для deprecated-класса: он пока в публикуемой поверхности.
+            // eslint-disable-next-line @typescript-eslint/no-deprecated
             const container = new ScrollContainerElement(child);
             return { container, child };
         },
