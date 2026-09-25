@@ -8,6 +8,9 @@ name: Release
 on:
   push:
     tags: ["v*"]
+  # Ручной перевыпуск: если tag-run упал (или тег стоит на коммите без этого файла),
+  # релиз запускается с ветки — версия тогда берётся из package.json как есть.
+  workflow_dispatch:
 
 jobs:
   publish:
@@ -29,11 +32,15 @@ jobs:
       # Тег обязан совпадать с lockstep-версией пакетов: иначе уедет не то, что помечено.
       - name: Проверка соответствия тега версии пакетов
         run: |
-          tag="${GITHUB_REF_NAME#v}"
           version=$(node -p "require('./packages/core/package.json').version")
-          if [ "$tag" != "$version" ]; then
-            echo "Тег $GITHUB_REF_NAME не совпадает с версией пакетов $version" >&2
-            exit 1
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            tag="${GITHUB_REF_NAME#v}"
+            if [ "$tag" != "$version" ]; then
+              echo "Тег $GITHUB_REF_NAME не совпадает с версией пакетов $version" >&2
+              exit 1
+            fi
+          else
+            echo "Ручной запуск с $GITHUB_REF_NAME: публикую версию $version из package.json"
           fi
           echo "version=$version" >> "$GITHUB_ENV"
 
