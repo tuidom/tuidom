@@ -2,6 +2,7 @@ import { Point, Size } from "@tuidom/core/common/geometryPromitives";
 import { TUIKeyboardEvent } from "@tuidom/core/dom/events/tuiKeyboardEvent";
 import { TUIMouseEvent } from "@tuidom/core/dom/events/tuiMouseEvent";
 import { TestApp } from "@tuidom/testing/TestApp";
+import type { MockInstance } from "vitest";
 import { describe, expect, it, vi } from "vitest";
 
 import { HFlexElement, hflexFill, hflexFixed } from "../layout/hFlexElement.ts";
@@ -40,11 +41,12 @@ function makeButtonRow(id: string, onButton: () => void): HFlexElement {
     return row;
 }
 
+interface ProjectionInternals {
+    rowHasChildren(id: string): boolean;
+}
+
 /** Спай на per-row шаг DFS-пересборки: ensureProjection зовёт rowHasChildren по разу на видимую строку. */
-function spyOnProjectionRebuild(): ReturnType<typeof vi.spyOn> {
-    interface ProjectionInternals {
-        rowHasChildren(id: string): boolean;
-    }
+function spyOnProjectionRebuild(): MockInstance<ProjectionInternals["rowHasChildren"]> {
     return vi.spyOn(ListViewElement.prototype as unknown as ProjectionInternals, "rowHasChildren");
 }
 

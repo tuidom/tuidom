@@ -489,12 +489,13 @@ export class TUIElement {
     /** Гасит фокус, если activeElement — этот элемент или его потомок. */
     private releaseFocusIfInside(): void {
         const fm = this.getRoot()?.focusManager ?? null;
-        let node = fm?.activeElement ?? null;
+        if (fm === null) return;
+        let node = fm.activeElement ?? null;
         while (node !== null && node !== this) {
             node = node.getParent();
         }
         if (node === this) {
-            fm!.setFocus(null);
+            fm.setFocus(null);
         }
     }
 
@@ -904,6 +905,7 @@ export class TUIElement {
      * состояние нужно ДО стилевого прохода, прямо в performLayout.
      */
     public hasStyleStateWithin(state: StyleState): boolean {
+        // eslint-disable-next-line @typescript-eslint/no-this-alias
         let node: TUIElement | null = this;
         while (node !== null) {
             if (node.styleStatesSet?.has(state) === true) return true;
@@ -946,6 +948,7 @@ export class TUIElement {
         // цепочка предков (иначе любой markDirty = полноэкранный damage).
         this.isPaintDirty = true;
         this.isLayoutDirty = true;
+        // eslint-disable-next-line @typescript-eslint/no-this-alias
         let top: TUIElement = this;
         for (let current = this._parent; current !== null; current = current._parent) {
             current.isLayoutDirty = true;
@@ -983,7 +986,10 @@ export class TUIElement {
             this.allocatedSize,
         );
         const old = this.lastPaintedRect;
+        // Ещё не рисовался — тоже moved. Optional chain здесь не подходит: после
+        // первого `old?.x` тип уже сужен, и остальные `old?.` стали бы лишними.
         const moved =
+            // eslint-disable-next-line @typescript-eslint/prefer-optional-chain
             old === null ||
             old.x !== rect.x ||
             old.y !== rect.y ||
@@ -1017,6 +1023,9 @@ export class TUIElement {
      * собственный хром по состоянию ребёнка вне его rect'а (ScrollBarDecorator:
      * бегунок в колонке за пределами ребёнка).
      */
+    // Именно геттер, не readonly-поле: подклассы переопределяют его геттером
+    // (ListViewElement, ScrollContainerElement), а поле базы затенило бы их прототипный аксессор.
+    // eslint-disable-next-line @typescript-eslint/class-literal-property-style
     protected get paintsSubtreeAtomically(): boolean {
         return false;
     }

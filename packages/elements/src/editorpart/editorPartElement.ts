@@ -80,7 +80,7 @@ export class EditorPartElement extends TUIElement {
      */
     public setViews(views: TUIElement[], weights?: readonly number[]): void {
         this.views = [...views];
-        const raw = weights !== undefined && weights.length === views.length ? [...weights] : [];
+        const raw = weights?.length === views.length ? [...weights] : [];
         this.weightsValue = this.normalizeWeights(raw);
         this.maximizedIndexValue = null;
         this.rebuildSashes();
