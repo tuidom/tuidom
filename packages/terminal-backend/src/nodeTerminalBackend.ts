@@ -299,11 +299,15 @@ export class NodeTerminalBackend implements ITerminalBackend {
         this.stdout.write("\x1b[?1049h");
         // Show cursor (will be positioned by the focused element)
         this.stdout.write("\x1b[?25h");
-        // Enable Kitty Keyboard Protocol — direct, so tmux tracks it per-pane (no passthrough)
-        this.writeDirect(KITTY_ENABLE);
-        // Also enable xterm modifyOtherKeys — tmux ignores the Kitty push but honors this,
+        // Enable xterm modifyOtherKeys — tmux ignores the Kitty push but honors this,
         // delivering Ctrl+Tab / Ctrl+Shift+<key> as CSI-u. Direct, per-pane.
+        // Порядок важен: ДО kitty-push. iTerm2 трактует любой `CSI > 4 ; n m` как сброс
+        // стека kitty-флагов (VT100Terminal.m: `_keyReportingFlags = 0` + `removeAllObjects`),
+        // так что modifyOtherKeys после push откатывал его в legacy — и Cmd терялся.
         this.writeDirect(MODIFY_OTHER_KEYS_ENABLE);
+        // Enable Kitty Keyboard Protocol — direct, so tmux tracks it per-pane (no passthrough).
+        // Последним из клавиатурных режимов — см. выше.
+        this.writeDirect(KITTY_ENABLE);
         // Enable mouse tracking (all-motion mode for hover/enter/leave) — direct, per-pane
         this.writeDirect(MOUSE_TRACKING_ALL_ENABLE);
         // Enable bracketed paste so pastes arrive as one text block — direct, per-pane
@@ -361,6 +365,8 @@ export class NodeTerminalBackend implements ITerminalBackend {
     }
 
     public teardown(): void {
+        // Клавиатурные режимы снимаются в порядке, обратном setup (LIFO): сначала pop
+        // kitty-флагов, который setup положил последним, затем сброс modifyOtherKeys.
         // Disable Kitty Keyboard Protocol — direct (matches the per-pane enable in setup)
         this.writeDirect(KITTY_DISABLE);
         // Reset modifyOtherKeys — direct (matches the per-pane enable in setup)
