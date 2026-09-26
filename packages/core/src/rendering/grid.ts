@@ -1,4 +1,4 @@
-import { DEFAULT_COLOR } from "../common/colorUtils.ts";
+import { compositeOver, DEFAULT_COLOR } from "../common/colorUtils.ts";
 import { Point, Rect, Size } from "../common/geometryPromitives.ts";
 import { StyleFlags } from "../common/styleFlags.ts";
 
@@ -22,6 +22,12 @@ export interface CellPatch {
 
 /**
  * 2D grid of terminal cells backed by a flat array for cache-friendly access.
+ *
+ * Ячейки хранят только непрозрачные цвета (или DEFAULT_COLOR): цвет с альфой,
+ * пришедший в {@link setCell}/{@link updateCell}, композитится с текущим
+ * содержимым ячейки на месте (см. `compositeOver`). Так порядок отрисовки —
+ * родитель, дети, оверлеи, патчи подсветок — становится порядком наложения
+ * слоёв, как в браузере, а бэкенды/снапшоты/SVG видят уже готовые цвета.
  */
 export class Grid {
     public readonly size: Size;
@@ -87,8 +93,8 @@ export class Grid {
         }
 
         cell.char = char;
-        cell.fg = fg;
-        cell.bg = bg;
+        cell.bg = compositeOver(bg, cell.bg);
+        cell.fg = compositeOver(fg, cell.bg);
         cell.style = style;
         cell.width = width;
 
@@ -106,8 +112,8 @@ export class Grid {
                 /* v8 ignore stop */
             }
             cont.char = "";
-            cont.fg = fg;
-            cont.bg = bg;
+            cont.fg = cell.fg;
+            cont.bg = cell.bg;
             cont.style = style;
             cont.width = 0;
         }
@@ -143,8 +149,11 @@ export class Grid {
         }
 
         if (patch.char !== undefined) cell.char = patch.char;
-        if (patch.fg !== undefined) cell.fg = patch.fg;
-        if (patch.bg !== undefined) cell.bg = patch.bg;
+        // Композитинг в порядке отрисовки: полупрозрачный bg ложится на то, что
+        // уже лежит в ячейке в этом кадре, полупрозрачный fg — на итоговый bg.
+        // Непрозрачные цвета проходят как раньше (compositeOver — одно сравнение).
+        if (patch.bg !== undefined) cell.bg = compositeOver(patch.bg, cell.bg);
+        if (patch.fg !== undefined) cell.fg = compositeOver(patch.fg, cell.bg);
         if (patch.style !== undefined) cell.style = patch.style;
         if (patch.width !== undefined) cell.width = patch.width;
 
@@ -164,8 +173,9 @@ export class Grid {
             }
             cont.char = "";
             cont.width = 0;
-            if (patch.fg !== undefined) cont.fg = patch.fg;
-            if (patch.bg !== undefined) cont.bg = patch.bg;
+            // Продолжение — та же ячейка: берёт уже скомпозиченные цвета головы.
+            if (patch.fg !== undefined) cont.fg = cell.fg;
+            if (patch.bg !== undefined) cont.bg = cell.bg;
             if (patch.style !== undefined) cont.style = patch.style;
         }
     }

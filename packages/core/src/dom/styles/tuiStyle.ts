@@ -1,4 +1,4 @@
-import { DEFAULT_COLOR } from "../../common/colorUtils.ts";
+import { compositeOver, DEFAULT_COLOR } from "../../common/colorUtils.ts";
 
 import type { AnyStyleToken } from "./styleTokens.ts";
 import { ROOT_VAR_SCOPE } from "./styleTokens.ts";
@@ -13,6 +13,9 @@ export const INHERITED_BG = -101;
 // ─── StyleColor type ───
 // A color value that can be:
 // - packed 24-bit RGB (0x000000–0xFFFFFF)
+// - packed RGB с альфой (`packRgba`/`parseHexColor`, `#RRGGBBAA`): при резолве
+//   композитится с унаследованным bg, в resolvedStyle уходит непрозрачный результат
+// - TRANSPARENT_COLOR (-2): `#RRGGBB00` — как bg ничего не красит
 // - DEFAULT_COLOR (-1): terminal default
 // - INHERITED_FG (-100): resolve to parent's fg
 // - INHERITED_BG (-101): resolve to parent's bg
@@ -199,9 +202,17 @@ export function mergeStyleVariants(
     return { fg, bg };
 }
 
+/**
+ * Резолв базовых fg/bg без when-вариантов и var-scope (утилита для тестов и
+ * простых потребителей; ядро идёт через `TUIElement.performStyleResolution`,
+ * та же модель): цвет с альфой композитится с унаследованным bg, fg — с
+ * итоговым bg, наружу уходят непрозрачные значения.
+ */
 export function resolveStyle(style: TUIStyle, inherited: ResolvedTUIStyle): ResolvedTUIStyle {
-    const fg = style.fg !== undefined ? resolveStyleColor(style.fg, inherited.fg, inherited.bg) : inherited.fg;
-    const bg = style.bg !== undefined ? resolveStyleColor(style.bg, inherited.fg, inherited.bg) : inherited.bg;
+    const ownBg = style.bg !== undefined ? resolveStyleColor(style.bg, inherited.fg, inherited.bg) : inherited.bg;
+    const bg = compositeOver(ownBg, inherited.bg);
+    const ownFg = style.fg !== undefined ? resolveStyleColor(style.fg, inherited.fg, inherited.bg) : inherited.fg;
+    const fg = compositeOver(ownFg, bg);
 
     return { fg, bg };
 }
