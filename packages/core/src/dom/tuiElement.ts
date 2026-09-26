@@ -1,4 +1,4 @@
-import { DEFAULT_COLOR } from "../common/colorUtils.ts";
+import { compositeOver, isColorValue, TRANSPARENT_COLOR } from "../common/colorUtils.ts";
 import { DisplayLine } from "../common/displayLine.ts";
 import { BoxConstraints, Offset, Point, Rect, Size } from "../common/geometryPromitives.ts";
 import { StyleFlags } from "../common/styleFlags.ts";
@@ -312,6 +312,8 @@ export class TUIElement {
     // вопрос «задан ли цвет собственным стилем» (заливка фона, инспектор).
     private appliedFgValue: StyleColor | undefined;
     private appliedBgValue: StyleColor | undefined;
+    /** Красит ли элемент собственный фон: bg задан своим стилем и не TRANSPARENT_COLOR. */
+    private paintsOwnBackgroundValue = false;
     // Активные состояния (hover/focus ведёт ядро, прочие — виджеты). Lazy:
     // у подавляющего большинства элементов состояний нет.
     private styleStatesSet: Set<string> | null = null;
@@ -727,15 +729,21 @@ export class TUIElement {
                 this.styleVarsValue !== null ? extendVarScope(context.vars, this.styleVarsValue) : context.vars;
             this.varScopeRef = vars;
             const describe = (): string => this.describeForStyleError();
-            const fg =
-                applied.fg !== undefined
-                    ? resolveStyleColor(applied.fg, context.fg, context.bg, vars, describe)
-                    : context.fg;
-            const bg =
+            // Цвет с альфой композитится уже здесь, с унаследованным bg: в
+            // resolvedStyle и детям уходят непрозрачные значения, иначе заливка
+            // фона и текст с тем же bg наложились бы на ячейку дважды.
+            const ownBg =
                 applied.bg !== undefined
                     ? resolveStyleColor(applied.bg, context.fg, context.bg, vars, describe)
                     : context.bg;
+            const bg = compositeOver(ownBg, context.bg);
+            const ownFg =
+                applied.fg !== undefined
+                    ? resolveStyleColor(applied.fg, context.fg, context.bg, vars, describe)
+                    : context.fg;
+            const fg = compositeOver(ownFg, bg);
             this.resolvedStyleValue = { fg, bg };
+            this.paintsOwnBackgroundValue = applied.bg !== undefined && ownBg !== TRANSPARENT_COLOR;
             this.childStyleContext = this.buildChildStyleContext(context);
         }
         this.isStyleDirty = false;
@@ -802,14 +810,15 @@ export class TUIElement {
      * предков и дефолтов tuidom (STYLE_TOKEN_DEFAULTS). Обычное место — корень:
      * хост транслирует сюда палитру темы одним вызовом (hot-swap = повторный
      * вызов). Таблица заменяется целиком, null — снимает. Значения — только
-     * конкретные числа (packed RGB | DEFAULT_COLOR); сентинелы INHERITED_*
-     * нелегальны.
+     * конкретные числа (packed RGB, в том числе с альфой — `packRgba`/
+     * `parseHexColor`, | DEFAULT_COLOR | TRANSPARENT_COLOR); сентинелы
+     * INHERITED_* нелегальны.
      */
     public setStyleVars(vars: Readonly<Record<string, number>> | null): void {
         if (vars === this.styleVarsValue) return;
         if (vars !== null) {
             for (const key of Object.keys(vars)) {
-                if (vars[key] < DEFAULT_COLOR) {
+                if (!isColorValue(vars[key])) {
                     throw new Error(
                         `${this.describeForStyleError()}.setStyleVars: токен "${key}" содержит сентинел/некорректное значение ${vars[key]} — таблицы принимают только конкретные цвета`,
                     );
@@ -1305,9 +1314,13 @@ export class TUIElement {
      * флагов стиля: собственный фон — это новая поверхность, и атрибуты того,
      * что нарисовано под ней раньше в этом кадре (подчёркивание диагностики под
      * попапом, жирный токен под диалогом), на ней проступать не должны.
+     *
+     * Полупрозрачный собственный bg уже скомпозичен каскадом с унаследованным
+     * (см. {@link performStyleResolution}); `TRANSPARENT_COLOR` (`#RRGGBB00`)
+     * считается «фона нет» — как CSS `transparent`, элемент ничего не красит.
      */
     protected paintOwnBackground(context: RenderContext): void {
-        if (this.appliedBgValue === undefined) return;
+        if (!this.paintsOwnBackgroundValue) return;
         const { fg, bg } = this.resolvedStyleValue;
         const { width, height } = this.layoutSize;
         for (let y = 0; y < height; y++) {
@@ -1319,7 +1332,7 @@ export class TUIElement {
 
     /** true, если фон задан собственным стилем (см. {@link paintOwnBackground}). */
     public get hasOwnBackground(): boolean {
-        return this.appliedBgValue !== undefined;
+        return this.paintsOwnBackgroundValue;
     }
 
     /**

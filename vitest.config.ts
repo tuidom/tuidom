@@ -11,9 +11,9 @@ export default defineConfig({
             // когда покрытие растёт (autoUpdate перезаписывает числа ниже).
             thresholds: {
                 autoUpdate: true,
-                statements: 99.14,
+                statements: 99.15,
                 branches: 99.52,
-                functions: 98.21,
+                functions: 98.23,
                 lines: 99.24,
             },
             reporter: ["text", "lcov", "json", "json-summary", "text-summary"],

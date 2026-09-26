@@ -218,11 +218,23 @@ Token→color tables cascade down the tree; the bottom of the chain is
 token throws on the first frame — fail fast instead of silently rendering
 wrong colors.
 
+**Colors and alpha.** A color is a number: opaque `0xRRGGBB` (`packRgb`),
+or with alpha via `packRgba(r, g, b, a)` / `parseHexColor("#RRGGBBAA")` from
+`@tuidom/core/common/colorUtils`. Terminals cannot blend, so the engine
+composites in paint order, like a browser: a translucent `bg` written into a
+cell is blended over whatever that cell already holds this frame (the parent's
+background, a line highlight underneath a selection), a translucent `fg` over
+the resulting `bg`. An element's own translucent `bg`/`fg` is composited with
+the inherited background by the cascade, so `resolvedStyle` and children always
+see opaque values. `#RRGGBB00` (`TRANSPARENT_COLOR`) paints nothing. Over the
+terminal's default color (`DEFAULT_COLOR`) there is nothing to blend with, so
+the alpha is dropped — give the root an opaque background.
+
 **Theme delivery is one call.** The host puts the whole palette of the active
 theme into the root var scope:
 
 ```ts
-root.setStyleVars(vars); // Record<string, number>: token name → color
+root.setStyleVars(vars); // Record<string, number>: token name → color (alpha allowed)
 ```
 
 Hot-swapping the theme is just calling it again — the tree re-resolves through
