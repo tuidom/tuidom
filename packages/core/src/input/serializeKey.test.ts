@@ -182,7 +182,51 @@ describe("serializeKey", () => {
     // ─── Error handling ───
 
     it("throws on unknown key name", () => {
-        expect(() => serializeKey("Ctrl+Shift+a")).toThrow("unknown key name");
+        expect(() => serializeKey("Ctrl+Foo")).toThrow("unknown key name");
+        expect(() => serializeKey("Meta+Foo")).toThrow("unknown key name");
+        expect(() => serializeKey("Meta+")).toThrow("unknown key name");
+    });
+
+    it("throws on a modified character that has no CSI u form", () => {
+        // Управляющие (C0/DEL/C1), kitty-PUA (U+E000 — это F1) и буква с
+        // многосимвольным lowercase («İ» → «i̇») честно не сериализуются.
+        for (const ch of ["\x01", "\x7f", "\x85", "\uE000", "\u0130"]) {
+            expect(() => serializeKey(`Meta+${ch}`)).toThrow("unknown key name");
+        }
+    });
+
+    // ─── Печатный символ с модификаторами: общая форма CSI <codepoint>;<mod>u ───
+
+    it("serializes Meta+s (Cmd+S на маке, super-бит) as CSI 115;9u", () => {
+        expect(serializeKey("Meta+s")).toBe("\x1b[115;9u");
+    });
+
+    it("serializes Ctrl+Shift+a as CSI 97;6u (базовая клавиша в нижнем регистре + shift-бит)", () => {
+        expect(serializeKey("Ctrl+Shift+a")).toBe("\x1b[97;6u");
+    });
+
+    it("serializes Meta+Shift+p as CSI 112;10u", () => {
+        expect(serializeKey("Meta+Shift+p")).toBe("\x1b[112;10u");
+    });
+
+    it("регистр буквы при модификаторе Shift не задаёт: Meta+S ≡ Meta+s", () => {
+        expect(serializeKey("Meta+S")).toBe("\x1b[115;9u");
+        expect(serializeKey("Ctrl+Shift+A")).toBe("\x1b[97;6u");
+    });
+
+    it("serializes Shift+digit, Meta+Space and non-ASCII letters via CSI u", () => {
+        expect(serializeKey("Shift+1")).toBe("\x1b[49;2u");
+        expect(serializeKey("Meta+Space")).toBe("\x1b[32;9u");
+        expect(serializeKey("Alt+Space")).toBe("\x1b[32;3u");
+        expect(serializeKey("Meta+ф")).toBe("\x1b[1092;9u");
+    });
+
+    it("не трогает существующие legacy-кодировки печатных символов", () => {
+        expect(serializeKey("Ctrl+s")).toBe("\x13");
+        expect(serializeKey("Ctrl+/")).toBe("\x1f");
+        expect(serializeKey("Alt+s")).toBe("\x1bs");
+        expect(serializeKey("Alt+S")).toBe("\x1bS");
+        expect(serializeKey("Ctrl+Space")).toBe("\x00");
     });
 
     // ─── Meta modifier ───
@@ -267,6 +311,58 @@ describe("serializeKey", () => {
             });
         }
     });
+});
+
+describe("serializeKey — roundtrip модификаторы × печатные ASCII", () => {
+    const modifierNames = ["Ctrl", "Shift", "Alt", "Meta"] as const;
+    // Все непустые подмножества модификаторов, в каноническом порядке.
+    const modifierSets = Array.from({ length: 15 }, (_, i) => modifierNames.filter((_, bit) => (i + 1) & (1 << bit)));
+    const printableAscii = Array.from({ length: 0x7e - 0x20 + 1 }, (_, i) => String.fromCharCode(0x20 + i));
+
+    // Legacy-кодировки, которые терминал сам не отличает от других клавиш, и
+    // serializeKey их сохраняет как есть: Ctrl+I = Tab, Ctrl+M = Enter (0x09/0x0d),
+    // а ESC O / ESC [ / ESC ] — префиксы SS3/CSI/OSC, а не Alt+символ.
+    const legacyCollisions = new Set(["Ctrl+i", "Ctrl+I", "Ctrl+m", "Ctrl+M", "Alt+O", "Alt+[", "Alt+]"]);
+
+    it("legacy-коллизии остаются прежними (не round-trip, но и не CSI u)", () => {
+        expect([...legacyCollisions].map(serializeKey)).toEqual(["\t", "\t", "\r", "\r", "\x1bO", "\x1b[", "\x1b]"]);
+    });
+
+    function isLetter(ch: string): boolean {
+        return ch.toLowerCase() !== ch.toUpperCase();
+    }
+
+    for (const mods of modifierSets) {
+        it(`${mods.join("+")} + каждый печатный ASCII → parseInput возвращает ту же клавишу и модификаторы`, () => {
+            const onlyAlt = mods.length === 1 && mods[0] === "Alt";
+            const shift = mods.includes("Shift");
+            for (const ch of printableAscii) {
+                const dsl = `${mods.join("+")}+${ch}`;
+                if (legacyCollisions.has(dsl)) continue;
+                const events = parseInput(serializeKey(dsl));
+                // Alt+<символ> — legacy ESC-префикс, он передаёт символ как есть;
+                // остальные формы несут базовую клавишу, регистр — от Shift.
+                const expectedKey = onlyAlt || !isLetter(ch) ? ch : shift ? ch.toUpperCase() : ch.toLowerCase();
+                expect(events, dsl).toHaveLength(1);
+                expect(
+                    {
+                        key: events[0].key,
+                        ctrlKey: events[0].ctrlKey,
+                        shiftKey: events[0].shiftKey,
+                        altKey: events[0].altKey,
+                        metaKey: events[0].metaKey,
+                    },
+                    dsl,
+                ).toEqual({
+                    key: expectedKey,
+                    ctrlKey: mods.includes("Ctrl"),
+                    shiftKey: shift,
+                    altKey: mods.includes("Alt"),
+                    metaKey: mods.includes("Meta"),
+                });
+            }
+        });
+    }
 });
 
 describe("serializeKey — ContextMenu (Kitty CSI-u)", () => {
