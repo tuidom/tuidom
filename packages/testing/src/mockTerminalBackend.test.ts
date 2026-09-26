@@ -283,4 +283,19 @@ describe("MockTerminalBackend", () => {
         expect(h1).toHaveBeenCalledOnce();
         expect(h2).toHaveBeenCalledOnce();
     });
+
+    it("probeTerminalVersion по умолчанию отвечает undefined, синхронно", () => {
+        const backend = new MockTerminalBackend();
+        const onResult = vi.fn();
+        backend.probeTerminalVersion(onResult);
+        expect(onResult).toHaveBeenCalledExactlyOnceWith(undefined);
+    });
+
+    it("probeTerminalVersion отвечает настроенным terminalVersion", () => {
+        const backend = new MockTerminalBackend();
+        backend.terminalVersion = "iTerm2 3.5.0";
+        const onResult = vi.fn();
+        backend.probeTerminalVersion(onResult);
+        expect(onResult).toHaveBeenCalledExactlyOnceWith("iTerm2 3.5.0");
+    });
 });

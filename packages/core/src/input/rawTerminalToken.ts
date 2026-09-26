@@ -136,18 +136,25 @@ export interface OscToken {
 // ─── Device-report tokens ───
 
 /**
- * A private-mode CSI response to one of our capability probes — NOT a key event.
+ * A response to one of our capability probes — NOT a key event.
  *  - "kitty-flags": reply to the Kitty keyboard-protocol query `CSI ? u` → `CSI ? <flags> u`.
  *  - "da1":         reply to Primary Device Attributes `CSI c` → `CSI ? <attrs> c`.
- * These begin with the private marker `?`, which never appears in a real key event.
+ *  - "xtversion":   reply to XTVERSION `CSI > 0 q` → `DCS > | <name(version)> ST`.
+ * The CSI replies begin with the private marker `?`, which never appears in a real key
+ * event; the XTVERSION reply is a DCS string (`ESC P > |`), not a key either.
  */
 export interface DeviceReportToken {
     readonly kind: "device-report";
-    readonly report: "kitty-flags" | "da1";
-    /** Raw parameter bytes including the leading `?` (e.g. "?15" or "?62;1;6"). */
+    readonly report: DeviceReportKind;
+    /**
+     * For CSI replies — raw parameter bytes including the leading `?` (e.g. "?15" or
+     * "?62;1;6"). For "xtversion" — the payload between `DCS > |` and ST (e.g. "iTerm2 3.5.0").
+     */
     readonly params: string;
     readonly raw: string;
 }
+
+export type DeviceReportKind = "kitty-flags" | "da1" | "xtversion";
 
 // ─── Mouse tokens ───
 

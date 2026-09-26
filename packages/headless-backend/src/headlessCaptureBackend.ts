@@ -70,6 +70,14 @@ export class HeadlessCaptureBackend implements ITerminalBackend {
         // intentionally never resolved — see doc comment
     }
 
+    /**
+     * There is no terminal to ask: answers `undefined` ("unknown terminal") right away,
+     * so version-dependent behavior stays at its deterministic default.
+     */
+    public probeTerminalVersion(onResult: (nameAndVersion: string | undefined) => void): void {
+        onResult(undefined);
+    }
+
     public renderFrame(grid: Grid, cursorPosition: Point | null): void {
         this.lastFrame = snapshotGrid(grid, cursorPosition);
     }

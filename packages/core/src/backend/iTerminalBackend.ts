@@ -35,6 +35,17 @@ export interface ITerminalBackend {
     probeKeyboardProtocol(onResult: (supported: boolean) => void): void;
 
     /**
+     * Asynchronously ask the terminal for its name and version (XTVERSION: `CSI > 0 q`
+     * → `DCS > | <name(version)> ST`). `onResult` fires exactly once with the reported
+     * string as-is (e.g. `"iTerm2 3.5.0"`, `"kitty(0.35.2)"`, `"WezTerm 20240203…"`), or
+     * `undefined` if the terminal doesn't answer within the probe window. The reply is
+     * consumed by the backend and never reaches `onInput`. Inside tmux the query goes
+     * to tmux itself (like the other probes), so the answer is tmux's own (`"tmux 3.4"`).
+     * Fire-and-forget — callers must not block on it.
+     */
+    probeTerminalVersion(onResult: (nameAndVersion: string | undefined) => void): void;
+
+    /**
      * Render a frame: receive the current grid and cursor position.
      * The backend decides how to output it (ANSI diffing, simple copy, etc.).
      */

@@ -1,7 +1,7 @@
 import { convertTokenToKeyPressEvent } from "./convertToken.ts";
 import { createKeyPressEvent, type KeyPressEvent } from "./keyEvent.ts";
 import type { DeviceReportToken, MouseToken, OscToken } from "./rawTerminalToken.ts";
-import { parseCSI, parseOSC, tokenize } from "./tokenize.ts";
+import { parseCSI, parseOSC, parseXtversionReply, tokenize, XTVERSION_REPLY_PREFIX } from "./tokenize.ts";
 
 /**
  * Index where an *incomplete* trailing escape sequence begins, or -1 if `data`
@@ -18,6 +18,12 @@ import { parseCSI, parseOSC, tokenize } from "./tokenize.ts";
  * incomplete — anything before it is already followed by more bytes.
  */
 function incompleteTailStart(data: string): number {
+    // Ответ XTVERSION (`ESC P > | … ESC \\`) — единственная строка, внутри которой
+    // может стоять «последний» ESC (от ST, разрезанного между чтениями), поэтому тело
+    // без терминатора проверяем раньше, чем ищем последний ESC.
+    const dcs = data.lastIndexOf(XTVERSION_REPLY_PREFIX);
+    if (dcs !== -1 && parseXtversionReply(data, dcs) === null) return dcs;
+
     const esc = data.lastIndexOf("\x1b");
     if (esc === -1) return -1;
 
@@ -29,6 +35,9 @@ function incompleteTailStart(data: string): number {
     if (next === 0x5b) return parseCSI(data, esc) === null ? esc : -1; // ESC [
     if (next === 0x5d) return parseOSC(data, esc) === null ? esc : -1; // ESC ]
     if (next === 0x4f) return esc + 2 >= data.length ? esc : -1; // ESC O (SS3) needs its final letter
+    // ESC P: незавершённое начало ответа XTVERSION (`ESC P >`) ждём. Хвост, уже
+    // разошедшийся с префиксом, — обычный Alt+Shift+P (ESC + символ), он завершён.
+    if (next === 0x50) return XTVERSION_REPLY_PREFIX.startsWith(data.slice(esc)) ? esc : -1;
 
     // ESC + printable / control / special is complete once the second byte is present (it is).
     return -1;
