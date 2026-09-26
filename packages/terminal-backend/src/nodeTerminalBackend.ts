@@ -3,7 +3,7 @@ import { Point, Size } from "@tuidom/core/common/geometryPromitives";
 import type { KeyPressEvent } from "@tuidom/core/input/keyEvent";
 import { KeyInputParser } from "@tuidom/core/input/keyInputParser";
 import { MOUSE_TRACKING_ALL_ENABLE, MOUSE_TRACKING_DISABLE } from "@tuidom/core/input/mouseTracking";
-import type { MouseToken } from "@tuidom/core/input/rawTerminalToken";
+import type { DeviceReportKind, MouseToken } from "@tuidom/core/input/rawTerminalToken";
 import { Grid } from "@tuidom/core/rendering/grid";
 import { TerminalRenderer } from "@tuidom/core/rendering/terminalRenderer";
 
@@ -53,7 +53,14 @@ const BRACKETED_PASTE_DISABLE = "\x1b[?2004l";
  */
 const KITTY_FLAGS_QUERY = "\x1b[?u";
 const DA1_QUERY = "\x1b[c";
-const KEYBOARD_PROBE_TIMEOUT_MS = 200;
+const PROBE_TIMEOUT_MS = 200;
+
+/**
+ * Terminal name/version probe: XTVERSION (`CSI > 0 q`) → `DCS > | <name(version)> ST`,
+ * then DA1 as the same "all replies are in" sentinel — terminals without XTVERSION stay
+ * silent on the first query but always answer DA1.
+ */
+const XTVERSION_QUERY = "\x1b[>0q";
 
 /**
  * How long to hold a partial escape sequence that arrived at the end of a stdin read,
@@ -92,7 +99,10 @@ export class NodeTerminalBackend implements ITerminalBackend {
     private pasteCallbacks: ((text: string) => void)[] = [];
     private resizeCallbacks: ((size: Size) => void)[] = [];
     private oscResponseCallbacks: ((code: number, data: string) => void)[] = [];
-    private deviceReportCallbacks: ((report: "kitty-flags" | "da1", params: string) => void)[] = [];
+    private deviceReportCallbacks: ((report: DeviceReportKind, params: string) => void)[] = [];
+    /** DA1-запросов отправлено / ответов получено — чтобы проба ждала именно свой DA1. */
+    private da1Sent = 0;
+    private da1Received = 0;
     private stdin: NodeJS.ReadStream;
     private stdout: NodeJS.WriteStream;
     private onDataHandler: ((chunk: string) => void) | null = null;
@@ -180,23 +190,60 @@ export class NodeTerminalBackend implements ITerminalBackend {
     }
 
     public probeKeyboardProtocol(onResult: (supported: boolean) => void): void {
-        let settled = false;
         let supported = false;
+        // Direct (not passthrough): the reply must reflect tmux's own Kitty support, per-pane.
+        this.probe(
+            KITTY_FLAGS_QUERY,
+            (report) => {
+                if (report === "kitty-flags") supported = true;
+            },
+            () => {
+                onResult(supported);
+            },
+        );
+    }
+
+    public probeTerminalVersion(onResult: (nameAndVersion: string | undefined) => void): void {
+        let nameAndVersion: string | undefined;
+        // Direct, как и проба клавиатуры: под tmux отвечает сам tmux — это его панель.
+        this.probe(
+            XTVERSION_QUERY,
+            (report, params) => {
+                if (report === "xtversion") nameAndVersion = params;
+            },
+            () => {
+                onResult(nameAndVersion);
+            },
+        );
+    }
+
+    /**
+     * Send `query` followed by DA1 and collect device reports until *our* DA1 reply
+     * arrives (or the timeout fires), then call `finish` exactly once. Replies come back
+     * in request order, so the n-th DA1 reply closes the n-th probe — two probes in
+     * flight don't settle each other early.
+     */
+    private probe(
+        query: string,
+        onReport: (report: DeviceReportKind, params: string) => void,
+        finish: () => void,
+    ): void {
+        const myDa1 = ++this.da1Sent;
+        let settled = false;
         let timer: ReturnType<typeof setTimeout> | null = null;
-        const finish = (): void => {
+        const settle = (): void => {
             if (settled) return;
             settled = true;
             if (timer !== null) clearTimeout(timer);
-            onResult(supported);
+            finish();
         };
-        this.deviceReportCallbacks.push((report) => {
+        this.deviceReportCallbacks.push((report, params) => {
             if (settled) return;
-            if (report === "kitty-flags") supported = true;
-            else finish(); // DA1 reply = all replies are in
+            if (report !== "da1") onReport(report, params);
+            else if (this.da1Received >= myDa1) settle(); // our DA1 reply = all replies are in
         });
-        // Direct (not passthrough): the reply must reflect tmux's own Kitty support, per-pane.
-        this.writeDirect(KITTY_FLAGS_QUERY + DA1_QUERY);
-        timer = setTimeout(finish, KEYBOARD_PROBE_TIMEOUT_MS);
+        this.writeDirect(query + DA1_QUERY);
+        timer = setTimeout(settle, PROBE_TIMEOUT_MS);
     }
 
     /** Fan a parsed input batch out to the registered callbacks. */
@@ -214,6 +261,7 @@ export class NodeTerminalBackend implements ITerminalBackend {
             for (const cb of this.oscResponseCallbacks) cb(oscToken.code, oscToken.data);
         }
         for (const report of result.deviceReports) {
+            if (report.report === "da1") this.da1Received++;
             for (const cb of this.deviceReportCallbacks) cb(report.report, report.params);
         }
     }

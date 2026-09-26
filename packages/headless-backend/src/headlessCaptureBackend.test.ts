@@ -168,4 +168,11 @@ describe("HeadlessCaptureBackend", () => {
         // The probe is intentionally never resolved in headless mode.
         expect(probe).not.toHaveBeenCalled();
     });
+
+    it("probeTerminalVersion отвечает undefined сразу — терминала, который бы ответил, нет", () => {
+        const backend = new HeadlessCaptureBackend();
+        const onResult = vi.fn();
+        backend.probeTerminalVersion(onResult);
+        expect(onResult).toHaveBeenCalledExactlyOnceWith(undefined);
+    });
 });

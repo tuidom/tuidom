@@ -74,6 +74,17 @@ export class MockTerminalBackend implements ITerminalBackend {
         this.keyboardProbeCallbacks.push(onResult);
     }
 
+    /**
+     * What {@link probeTerminalVersion} reports (XTVERSION payload, e.g. `"iTerm2 3.5.0"`).
+     * `undefined` (default) = the terminal didn't answer. Set it before the app probes.
+     */
+    public terminalVersion: string | undefined = undefined;
+
+    /** Answers synchronously with {@link terminalVersion} — no terminal round-trip to wait for. */
+    public probeTerminalVersion(onResult: (nameAndVersion: string | undefined) => void): void {
+        onResult(this.terminalVersion);
+    }
+
     public cursorPosition: Point = new Point(0, 0);
 
     public renderFrame(grid: Grid, cursorPosition: Point): void {

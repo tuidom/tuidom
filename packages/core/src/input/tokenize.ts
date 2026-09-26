@@ -72,6 +72,17 @@ export function tokenize(data: string): RawTerminalToken[] {
                 // Incomplete OSC — emit standalone Escape
                 tokens.push({ kind: "standalone-esc", raw: data[i] });
                 i++;
+            } else if (next === 0x50 && data.startsWith(XTVERSION_REPLY_PREFIX, i)) {
+                // DCS-ответ на XTVERSION: \x1bP>|<name(version)>\x1b\\. Без ST (обрезан, и
+                // KeyInputParser его уже не ждёт) — падаем в ESC+символ, как было до разбора DCS.
+                const dcsResult = parseXtversionReply(data, i);
+                if (dcsResult) {
+                    tokens.push(dcsResult.token);
+                    i = dcsResult.nextIndex;
+                    continue;
+                }
+                tokens.push({ kind: "esc-char", char: data[i + 1], charCode: next, raw: data.slice(i, i + 2) });
+                i += 2;
             } else if (next === 0x4f) {
                 // SS3 sequence: \x1bO<letter>
                 if (i + 2 < data.length) {
@@ -741,6 +752,37 @@ function buildOscResult(body: string, raw: string, nextIndex: number): OSCTokenR
     const code = parseInt(codeStr, 10);
     return {
         token: { kind: "osc", code: isNaN(code) ? -1 : code, data, raw },
+        nextIndex,
+    };
+}
+
+// ─── DCS: XTVERSION reply ───
+
+/**
+ * Начало ответа на XTVERSION (`CSI > 0 q`): `DCS > |`. Разбираем только его: голое
+ * `ESC P` — это ещё и Alt+Shift+P legacy-терминала, так что произвольный DCS не ловим.
+ */
+export const XTVERSION_REPLY_PREFIX = "\x1bP>|";
+
+/**
+ * Parse an XTVERSION reply `ESC P > | <text> ESC \` starting at data[start] = ESC.
+ * Returns null if the string terminator (ST) hasn't arrived yet.
+ */
+export function parseXtversionReply(
+    data: string,
+    start: number,
+): { token: DeviceReportToken; nextIndex: number } | null {
+    const bodyStart = start + XTVERSION_REPLY_PREFIX.length;
+    const end = data.indexOf("\x1b\\", bodyStart);
+    if (end === -1) return null;
+    const nextIndex = end + 2;
+    return {
+        token: {
+            kind: "device-report",
+            report: "xtversion",
+            params: data.slice(bodyStart, end),
+            raw: data.slice(start, nextIndex),
+        },
         nextIndex,
     };
 }
