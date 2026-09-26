@@ -8,9 +8,14 @@
  *   serializeKey('Ctrl+ArrowUp')   → '\x1b[1;5A'
  *   serializeKey('F5')             → '\x1b[15~'
  *   serializeKey('Alt+a')          → '\x1ba'
+ *   serializeKey('Meta+s')         → '\x1b[115;9u'
+ *   serializeKey('Ctrl+Shift+a')   → '\x1b[97;6u'
  *
  * Supports modifier prefixes: Ctrl+, Shift+, Alt+, Meta+ (combinable).
+ * Meta — это super-бит kitty (8): так приходит Cmd на маке.
  */
+
+import { kittyCodepointMap } from "./tokenize.ts";
 
 /** Simple special keys (no modifiers, no CSI) */
 const simpleSpecialKeys: Record<string, string> = {
@@ -74,6 +79,22 @@ function encodeModifier(ctrl: boolean, shift: boolean, alt: boolean, meta: boole
     if (ctrl) mod += 4;
     if (meta) mod += 8;
     return mod;
+}
+
+/**
+ * Codepoint для общей CSI u-формы, если `ch` — один печатный символ, который
+ * parseInput вернёт как есть: не управляющий и не занятый kitty под
+ * функциональную клавишу (PUA). Буква сворачивается в нижний регистр — так
+ * kitty шлёт базовую клавишу; регистр в событии даёт Shift-бит.
+ */
+function printableCodepoint(ch: string): number | undefined {
+    const lower = ch.toLowerCase();
+    const codepoint = lower.codePointAt(0);
+    // Пусто («Meta+»), имя клавиши («Foo») или буква, чей lowercase — не один символ («İ»).
+    if (codepoint === undefined || String.fromCodePoint(codepoint) !== lower) return undefined;
+    if (codepoint < 0x20 || (codepoint >= 0x7f && codepoint <= 0x9f)) return undefined;
+    if (kittyCodepointMap[codepoint] !== undefined) return undefined;
+    return codepoint;
 }
 
 export function serializeKey(name: string): string {
@@ -191,6 +212,17 @@ export function serializeKey(name: string): string {
     // Single printable character (no modifiers)
     if (!hasModifiers && remaining.length === 1) {
         return remaining;
+    }
+
+    // Печатный символ с любым другим набором модификаторов — общая форма kitty
+    // CSI <codepoint>;<mod>u. Сюда доходят только комбинации, у которых нет
+    // legacy-кодировки (ветки выше их уже вернули): Meta+s, Ctrl+Shift+a, Shift+1…
+    // Как и kitty, шлём codepoint базовой клавиши: буква — в нижнем регистре, а
+    // регистр задаёт только Shift-префикс (Meta+S ≡ Meta+s, как Ctrl+A ≡ Ctrl+a).
+    const codepoint = printableCodepoint(remaining === "Space" ? " " : remaining);
+    if (codepoint !== undefined) {
+        const mod = encodeModifier(ctrl, shift, alt, meta);
+        return `\x1b[${codepoint.toString()};${mod.toString()}u`;
     }
 
     throw new Error(`serializeKey: unknown key name "${name}". Add it to the mapping.`);
