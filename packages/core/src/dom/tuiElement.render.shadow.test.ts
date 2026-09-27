@@ -15,11 +15,13 @@ const SHADOW = STYLE_TOKEN_DEFAULTS["widget.shadow"];
 
 /** Контейнер с текстом на фоне и одним «попапом» 4×2 в (2,1). */
 class HostElement extends TUIElement {
-    public readonly popup = new PopupElement();
+    public readonly popup: TUIElement;
     public popupPosition = new Point(2, 1);
+    public text = "text under the popup";
 
-    public constructor() {
+    public constructor(popup: TUIElement = new PopupElement()) {
         super();
+        this.popup = popup;
         this.appendChild(this.popup);
     }
 
@@ -32,10 +34,13 @@ class HostElement extends TUIElement {
     public override render(context: RenderContext): void {
         this.paintOwnBackground(context);
         for (let y = 0; y < this.layoutSize.height; y++) {
-            context.drawText(0, y, "text under the popup".slice(0, this.layoutSize.width), {
-                fg: this.resolvedStyle.fg,
-                bg: this.resolvedStyle.bg,
-            });
+            context.drawText(
+                0,
+                y,
+                this.text,
+                { fg: this.resolvedStyle.fg, bg: this.resolvedStyle.bg },
+                { maxWidth: this.layoutSize.width },
+            );
         }
         this.renderChildren(context);
     }
@@ -51,8 +56,8 @@ function renderHost(
     width = 12,
     height = 5,
     vars?: Record<string, number>,
+    host = new HostElement(),
 ): { host: HostElement; screen: TerminalScreen } {
-    const host = new HostElement();
     host.setAsRoot();
     host.style = { fg: ROOT_FG, bg: ROOT_BG };
     if (vars !== undefined) host.setStyleVars(vars);
@@ -151,6 +156,78 @@ describe("TUIElement.shadow — тень оверлея рисует родит�
             host.render(new RenderContext(screen, new Offset(0, 0), new Rect(new Point(0, 0), size)));
         }).not.toThrow();
         expect(cell(screen, 11, 4).bg).toBe(POPUP_BG);
+    });
+
+    it("частичная перерисовка только полосы тени кладёт тень заново, не рисуя ребёнка", () => {
+        const host = new HostElement();
+        host.popup.shadow = true;
+        const { screen } = renderHost(12, 5, undefined, host);
+        const shadedBg = compositeOver(SHADOW, ROOT_BG);
+        expect(cell(screen, 6, 2).bg).toBe(shadedBg);
+
+        // Damage-rect задел только правую колонку тени (x=6, y=2..3) — так бывает,
+        // когда перерисовался виджет под тенью. Ячейки очищены, попап вне клипа.
+        const strip = new Rect(new Point(6, 2), new Size(1, 2));
+        screen.clearRect(strip);
+        const render = vi.spyOn(host.popup, "render");
+        host.render(new RenderContext(screen, new Offset(0, 0), strip));
+
+        expect(render).not.toHaveBeenCalled();
+        expect(cell(screen, 6, 2).bg).toBe(shadedBg);
+        expect(cell(screen, 6, 3).bg).toBe(shadedBg);
+        expect(cell(screen, 7, 3).bg).toBe(ROOT_BG); // вне клипа и вне тени — не тронуто
+    });
+
+    it("широкий глиф под кромкой тени затемняется целиком, без двойной тени", () => {
+        const host = new HostElement();
+        host.popup.shadow = true;
+        host.text = "漢字漢字漢字"; // головы в чётных колонках, продолжения — в нечётных
+        const { screen } = renderHost(12, 5, undefined, host);
+        const shaded = { fg: compositeOver(SHADOW, ROOT_FG), bg: compositeOver(SHADOW, ROOT_BG) };
+        const plain = { fg: ROOT_FG, bg: ROOT_BG };
+
+        // Правая колонка x=6, y=2: голова — тень тянется в продолжение x=7.
+        expect(cell(screen, 6, 2)).toEqual(shaded);
+        expect(cell(screen, 7, 2)).toEqual(shaded);
+        expect(cell(screen, 7, 1)).toEqual(plain);
+        // Нижняя строка y=3, x=3..6: продолжение в x=3 отсылает к голове в углу
+        // x=2 (глиф целиком), голова x=4 красится сама, продолжение x=5 — уже
+        // покрашено головой (не дважды), угол x=6 — голова, тянет x=7.
+        for (let x = 2; x <= 7; x++) expect(cell(screen, x, 3)).toEqual(shaded);
+        expect(cell(screen, 8, 3)).toEqual(plain);
+        expect(screen.getCell(new Point(2, 3)).char).toBe("字");
+        expect(screen.getCell(new Point(3, 3)).width).toBe(0);
+
+        // Клип отсёк голову углового глифа (x=2): продолжение в x=3 перекрашивает
+        // только фон хоста, тень до головы не дотягивается — и не падает.
+        host.render(new RenderContext(screen, new Offset(0, 0), new Rect(new Point(3, 3), new Size(1, 1))));
+        expect(screen.getCell(new Point(3, 3)).width).toBe(0);
+        expect(cell(screen, 3, 3).bg).toBe(ROOT_BG);
+        expect(cell(screen, 2, 3)).toEqual(shaded);
+    });
+
+    it("продолжение широкого глифа самого ребёнка у его правой кромки не затемняется", () => {
+        class WidePopup extends TUIElement {
+            public override render(context: RenderContext): void {
+                context.drawBox(0, 0, this.layoutSize.width, this.layoutSize.height, {
+                    fg: ROOT_FG,
+                    bg: POPUP_BG,
+                    fill: true,
+                });
+                // Без maxWidth: голова в последней колонке попапа (x=5), продолжение
+                // грид кладёт в x=6 — в полосу тени.
+                context.drawText(3, 1, "漢", { fg: ROOT_FG, bg: POPUP_BG });
+            }
+        }
+        const host = new HostElement(new WidePopup());
+        host.popup.shadow = true;
+        const { screen } = renderHost(12, 5, undefined, host);
+
+        expect(screen.getCell(new Point(5, 2)).char).toBe("漢");
+        expect(screen.getCell(new Point(6, 2)).width).toBe(0);
+        expect(cell(screen, 6, 2).bg).toBe(POPUP_BG);
+        expect(cell(screen, 5, 2).bg).toBe(POPUP_BG);
+        expect(cell(screen, 6, 3).bg).toBe(compositeOver(SHADOW, ROOT_BG)); // угол под ним — обычная тень
     });
 
     it("сеттер shadow метит элемент dirty только при смене значения", () => {

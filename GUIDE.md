@@ -248,8 +248,10 @@ Popups in VS Code cast a `box-shadow`; the TUI counterpart is
 parent darkens the column to the right and the row below the element with the
 translucent `widget.shadow` token, composited over whatever is already drawn.
 Context menus, menu-bar dropdowns and select lists enable it themselves; enable
-it on your own popups (quick pick, hover, dialogs). Themes that draw
-`menu.border` in the menu's own background color (Catppuccin) rely on it.
+it on your own popups (quick pick, hover, dialogs). A wide glyph (CJK, emoji)
+under the shadow's edge is shaded whole — a cell cannot be half-shaded. Themes
+that draw `menu.border` in the menu's own background color (Catppuccin) rely on
+it.
 
 ## Input and events
 

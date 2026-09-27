@@ -1,4 +1,4 @@
-import { BoxConstraints, Offset, Point, Rect, Size } from "../common/geometryPromitives.ts";
+import { BoxConstraints, Point, Size } from "../common/geometryPromitives.ts";
 
 import type { TUIEventBase } from "./events/tuiEventBase.ts";
 import type { TUIKeyboardEvent } from "./events/tuiKeyboardEvent.ts";
@@ -50,8 +50,9 @@ export interface OverlaySessionOptions {
     shouldCloseOnEscape?: () => boolean;
     /**
      * Рисовать тень под оверлеем (`TUIElement.shadow`, цвет `widget.shadow`).
-     * Попапы, меню, пикеры и диалоги VS Code все с тенью; по умолчанию выключено —
-     * докнутые виджеты (find) и прозрачные хит-слои тени не хотят.
+     * Попапы, меню, пикеры и диалоги VS Code все с тенью; докнутые виджеты (find)
+     * и прозрачные хит-слои тени не хотят. Не задано — остаётся `element.shadow`
+     * как выставил владелец (по умолчанию у элемента тени нет).
      */
     shadow?: boolean;
 }
@@ -136,7 +137,7 @@ export class OverlayLayer extends TUIElement {
 
         const initialVisible = options.visible ?? false;
 
-        element.shadow = options.shadow ?? false;
+        if (options.shadow !== undefined) element.shadow = options.shadow;
         this.addItem(element, position, false);
 
         const session: OverlaySessionState = {
@@ -321,16 +322,9 @@ export class OverlayLayer extends TUIElement {
 
             // Позиция — из localPosition (её выставил layoutChild), не из
             // item.position: после layout авторитетна геометрия элемента (Н5).
-            // Клип по границам ребёнка — инвариант отрисовки (Н2): нарисованное
-            // не выходит за layoutSize, хит-зона совпадает с видимым.
-            const child = item.element;
-            const childOffset = new Offset(child.localPosition.dx, child.localPosition.dy);
-            const clip = new Rect(child.globalPosition, child.layoutSize);
-            const childContext = context.withOffset(childOffset).withClip(clip);
-            if (childContext.clipRect.isEmpty) continue;
-            child.render(childContext);
-            // Тень — в контексте слоя (клип по слою, не по ребёнку), как в renderChildren.
-            if (child.shadow) this.paintChildShadow(context, child);
+            // Клип по границам ребёнка и тень за ним — общий renderChild (Н2):
+            // нарисованное не выходит за layoutSize, хит-зона совпадает с видимым.
+            this.renderChild(context, item.element);
         }
     }
 

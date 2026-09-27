@@ -59,6 +59,41 @@ describe("OverlayLayer — тень сессии", () => {
         expect(app.backend.getBgAt(new Point(9, 3))).toBe(CONTENT_BG);
     });
 
+    it("shadow не задан в опциях — остаётся выставленный владельцем element.shadow", () => {
+        const app = createApp();
+        const popup = createPopup();
+        popup.shadow = true;
+        app.root.overlayLayer.createSession(popup, new Point(4, 2), { visible: true, pointerPolicy: "passthrough" });
+        app.render();
+
+        expect(popup.shadow).toBe(true);
+        expect(app.backend.getBgAt(new Point(5, 3))).toBe(compositeOver(SHADOW, CONTENT_BG));
+    });
+
+    it("перерисовка виджета под полосой тени не пробивает в ней дыру", () => {
+        const app = createApp();
+        // Нижний оверлей лежит ровно под будущей тенью попапа: (5,3) 5×1.
+        const under = new TextLabelElement("under");
+        under.style = { fg: CONTENT_FG, bg: CONTENT_BG };
+        app.root.overlayLayer.createSession(under, new Point(5, 3), { visible: true, pointerPolicy: "passthrough" });
+        const popup = createPopup();
+        app.root.overlayLayer.createSession(popup, new Point(4, 2), {
+            visible: true,
+            shadow: true,
+            pointerPolicy: "passthrough",
+        });
+        app.render();
+        const shadedBg = compositeOver(SHADOW, CONTENT_BG);
+        expect(app.backend.getBgAt(new Point(6, 3))).toBe(shadedBg);
+
+        // Damage только от нижнего: rect (5,3) 5×1 не пересекает попап (4,2) 5×1.
+        under.markDirty();
+        app.render();
+
+        expect(app.backend.getBgAt(new Point(6, 3))).toBe(shadedBg);
+        expect(app.backend.getBgAt(new Point(9, 3))).toBe(shadedBg); // угол
+    });
+
     it("после закрытия сессии тень стирается вместе с попапом", () => {
         const app = createApp();
         const popup = createPopup();
