@@ -48,6 +48,12 @@ export interface OverlaySessionOptions {
      * (владелец обработает Escape сам — например закроет только верхнее подменю).
      */
     shouldCloseOnEscape?: () => boolean;
+    /**
+     * Рисовать тень под оверлеем (`TUIElement.shadow`, цвет `widget.shadow`).
+     * Попапы, меню, пикеры и диалоги VS Code все с тенью; по умолчанию выключено —
+     * докнутые виджеты (find) и прозрачные хит-слои тени не хотят.
+     */
+    shadow?: boolean;
 }
 
 export interface OverlaySessionHandle {
@@ -130,6 +136,7 @@ export class OverlayLayer extends TUIElement {
 
         const initialVisible = options.visible ?? false;
 
+        element.shadow = options.shadow ?? false;
         this.addItem(element, position, false);
 
         const session: OverlaySessionState = {
@@ -322,6 +329,8 @@ export class OverlayLayer extends TUIElement {
             const childContext = context.withOffset(childOffset).withClip(clip);
             if (childContext.clipRect.isEmpty) continue;
             child.render(childContext);
+            // Тень — в контексте слоя (клип по слою, не по ребёнку), как в renderChildren.
+            if (child.shadow) this.paintChildShadow(context, child);
         }
     }
 

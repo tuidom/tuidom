@@ -299,6 +299,7 @@ export class PopupMenuElement extends TUIElement {
             },
             {
                 visible: true,
+                shadow: true,
                 focusOnOpen: false,
                 restoreFocus: false,
                 closeOnEscape: false,

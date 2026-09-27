@@ -241,6 +241,16 @@ Hot-swapping the theme is just calling it again — the tree re-resolves through
 the cascade. Widgets declare token *names* once at construction and never
 listen to theme changes.
 
+### Overlay shadow
+
+Popups in VS Code cast a `box-shadow`; the TUI counterpart is
+`element.shadow = true` (or `shadow: true` in `OverlaySessionOptions`): the
+parent darkens the column to the right and the row below the element with the
+translucent `widget.shadow` token, composited over whatever is already drawn.
+Context menus, menu-bar dropdowns and select lists enable it themselves; enable
+it on your own popups (quick pick, hover, dialogs). Themes that draw
+`menu.border` in the menu's own background color (Catppuccin) rely on it.
+
 ## Input and events
 
 Events propagate like in the web DOM: **capture → target → bubble → default
