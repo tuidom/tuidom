@@ -183,7 +183,6 @@ export class SelectBoxElement extends TUIElement {
             { screenX: this.globalPosition.x, screenY: this.globalPosition.y },
             {
                 visible: true,
-                shadow: true,
                 restoreFocus: true,
                 focusOnOpen: true,
                 closeOnEscape: true,

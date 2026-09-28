@@ -49,10 +49,10 @@ export interface OverlaySessionOptions {
      */
     shouldCloseOnEscape?: () => boolean;
     /**
-     * Рисовать тень под оверлеем (`TUIElement.shadow`, цвет `widget.shadow`).
-     * Попапы, меню, пикеры и диалоги VS Code все с тенью; докнутые виджеты (find)
-     * и прозрачные хит-слои тени не хотят. Не задано — остаётся `element.shadow`
-     * как выставил владелец (по умолчанию у элемента тени нет).
+     * Рисовать тень под оверлеем (`TUIElement.shadow`, цвет `widget.shadow`) —
+     * TUI-аналог box-shadow попапов VS Code. Выключено по умолчанию у всех
+     * сессий, включая меню tuidom: включает хост. Не задано — остаётся
+     * `element.shadow` как выставил владелец.
      */
     shadow?: boolean;
 }

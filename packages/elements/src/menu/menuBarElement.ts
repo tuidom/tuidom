@@ -240,7 +240,6 @@ export class MenuBarElement extends TUIElement {
         let session: OverlaySessionHandle | null = null;
         session = layer.createSession(menu, position, {
             visible: true,
-            shadow: true,
             // Меню-бар сам управляет закрытием дропдауна: клик снаружи уводит фокус →
             // blur → deactivate, а повторный клик по тому же пункту тоглит его. Перехват
             // в OverlayLayer (close-on-outside) гонялся бы с этим тоглом, поэтому passthrough.

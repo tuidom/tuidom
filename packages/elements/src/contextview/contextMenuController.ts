@@ -48,7 +48,6 @@ export class ContextMenuController {
         let session: OverlaySessionHandle | null = null;
         session = layer.openPopupSession(menu, request.anchor, {
             visible: true,
-            shadow: true,
             restoreFocus: true,
             focusOnOpen: true,
             closeOnEscape: true,
