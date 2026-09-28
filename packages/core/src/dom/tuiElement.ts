@@ -419,6 +419,34 @@ export class TUIElement {
 
     private hiddenValue = false;
 
+    /**
+     * Тень оверлея — TUI-аналог `box-shadow` VS Code: колонка справа и строка
+     * снизу от элемента (сдвиг 1×1) затемняются цветом `widget.shadow`
+     * (с альфой, композитится с тем, что уже нарисовано). Рисует не сам
+     * элемент, а его родитель после него ({@link renderChildren},
+     * `OverlayLayer.render`): клип ребёнка не выпускает его за собственный
+     * rect (Н2), а тень лежит снаружи. Damage-обход учитывает её через
+     * {@link paintOutset}. Отдаёт форму оверлею там, где тема рисует рамку
+     * цветом фона (Catppuccin: `menu.border` = фон меню).
+     *
+     * Рисуют её канонические циклы — {@link renderChildren} и
+     * `OverlayLayer.render` (оба через {@link renderChild}). Контейнеры со своим
+     * циклом (`SizedBoxElement`, `ScrollViewport`, строки списка) ребёнка
+     * растягивают на весь свой rect — тени там некуда лечь, она осталась бы за
+     * клипом самого контейнера.
+     */
+    public get shadow(): boolean {
+        return this.shadowValue;
+    }
+
+    public set shadow(value: boolean) {
+        if (this.shadowValue === value) return;
+        this.shadowValue = value;
+        this.markDirty();
+    }
+
+    private shadowValue = false;
+
     /** Прикрепляет ребёнка в конец списка (снимая с прежнего родителя). */
     protected appendChild(child: TUIElement): void {
         this.insertChild(this.childrenList.length, child);
@@ -990,9 +1018,13 @@ export class TUIElement {
             this.hasPaintDirtyDescendant = false;
             return;
         }
+        // Rect для damage — с outset'ом: тень родитель рисует за границей
+        // allocatedSize, и её ячейки тоже должны перерисоваться при переезде,
+        // скрытии и paint-dirty.
+        const outset = this.paintOutset;
         const rect = new Rect(
             new Point(parentOrigin.x + this.localPosition.dx, parentOrigin.y + this.localPosition.dy),
-            this.allocatedSize,
+            new Size(this.allocatedSize.width + outset, this.allocatedSize.height + outset),
         );
         const old = this.lastPaintedRect;
         // Ещё не рисовался — тоже moved. Optional chain здесь не подходит: после
@@ -1017,6 +1049,14 @@ export class TUIElement {
         this.isPaintDirty = false;
         this.hasPaintDirtyDescendant = false;
         if (descend) this.collectChildrenDamage(sink, rect.origin);
+    }
+
+    /**
+     * На сколько ячеек вправо и вниз родитель рисует за границей элемента
+     * (тень, см. {@link shadow}). Damage-rect элемента расширяется на столько же.
+     */
+    protected get paintOutset(): number {
+        return this.shadowValue ? 1 : 0;
     }
 
     /** Обход детей damage-сбора — seam для контейнеров с нестандартной структурой. */
@@ -1352,14 +1392,68 @@ export class TUIElement {
     protected renderChildren(context: RenderContext): void {
         for (const child of this.getChildren()) {
             if (child.hidden) continue;
-            const offset = new Offset(child.localPosition.dx, child.localPosition.dy);
-            const clip = new Rect(child.globalPosition, child.layoutSize);
-            const childContext = context.withOffset(offset).withClip(clip);
-            // Пустой клип — ребёнок целиком вне отрисовываемой области: пропуск
-            // всего поддерева, включая side-эффекты его render.
-            if (childContext.clipRect.isEmpty) continue;
-            child.render(childContext);
+            this.renderChild(context, child);
         }
+    }
+
+    /**
+     * Отрисовка одного ребёнка в контексте родителя: сдвиг на localPosition,
+     * клип по границам ребёнка, затем его тень (см. {@link shadow}) — уже в
+     * контексте родителя, потому что она лежит за клипом ребёнка. Тень не
+     * зависит от того, попал ли сам ребёнок в клип: damage-rect может задеть
+     * только полосу тени (перерисовался виджет под ней), и тогда ребёнок
+     * пропускается, а тень обязана лечь заново.
+     */
+    protected renderChild(context: RenderContext, child: TUIElement): void {
+        const offset = new Offset(child.localPosition.dx, child.localPosition.dy);
+        const clip = new Rect(child.globalPosition, child.layoutSize);
+        const childContext = context.withOffset(offset).withClip(clip);
+        // Пустой клип — ребёнок целиком вне отрисовываемой области: пропуск
+        // всего поддерева, включая side-эффекты его render.
+        if (!childContext.clipRect.isEmpty) child.render(childContext);
+        if (child.shadow) this.paintChildShadow(context, child);
+    }
+
+    /**
+     * Тень ребёнка (см. {@link shadow}) в контексте РОДИТЕЛЯ: колонка справа
+     * (x = right, строки top+1…bottom) и строка снизу (y = bottom, колонки
+     * left+1…right) — классический сдвиг 1×1. Ячейка затемняется цветом
+     * `widget.shadow` из var-scope ребёнка: bg композитит грид, fg — здесь
+     * (грид кладёт fg с альфой на bg, а не на прежний fg); терминальный
+     * DEFAULT_COLOR у fg не трогаем — смешивать не с чем.
+     *
+     * Широкий глиф (CJK, эмодзи) наполовину не красится: голова тянет цвета в
+     * продолжение (`Grid.updateCell`), поэтому глиф под кромкой тени
+     * затемняется целиком — тень на этой строке шире на колонку. Продолжение
+     * в полосе пропускается: его голова либо сама в полосе (уже покрашена —
+     * иначе двойная тень), либо внутри ребёнка (его глиф у правой кромки).
+     * Единственное исключение — голова в пропущенном нижнем левом углу: такой
+     * глиф красится целиком через голову.
+     */
+    protected paintChildShadow(context: RenderContext, child: TUIElement): void {
+        const color = child.styleVar("widget.shadow");
+        if (color === TRANSPARENT_COLOR) return;
+        const left = child.localPosition.dx;
+        const top = child.localPosition.dy;
+        const right = left + child.layoutSize.width;
+        const bottom = top + child.layoutSize.height;
+        const shadeCell = (x: number, y: number, cell: ReadonlyCellData): void => {
+            context.setCell(x, y, { bg: color, fg: cell.fg < 0 ? cell.fg : compositeOver(color, cell.fg) });
+        };
+        const shade = (x: number, y: number, wholeGlyph: boolean): void => {
+            const cell = context.getCell(x, y);
+            if (cell === null) return;
+            if (cell.width !== 0) {
+                shadeCell(x, y, cell);
+                return;
+            }
+            if (!wholeGlyph) return;
+            const head = context.getCell(x - 1, y);
+            if (head === null) return;
+            shadeCell(x - 1, y, head);
+        };
+        for (let y = top + 1; y <= bottom; y++) shade(right, y, false);
+        for (let x = left + 1; x < right; x++) shade(x, bottom, x === left + 1);
     }
 
     // ─── Hit-testing ───

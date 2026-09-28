@@ -12,9 +12,9 @@ export default defineConfig({
             thresholds: {
                 autoUpdate: true,
                 statements: 99.15,
-                branches: 99.52,
-                functions: 98.23,
-                lines: 99.24,
+                branches: 99.53,
+                functions: 98.24,
+                lines: 99.25,
             },
             reporter: ["text", "lcov", "json", "json-summary", "text-summary"],
             include: ["packages/*/src/**/*.ts"],

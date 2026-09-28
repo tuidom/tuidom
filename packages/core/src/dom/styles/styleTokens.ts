@@ -1,4 +1,4 @@
-import { DEFAULT_COLOR, packRgb } from "../../common/colorUtils.ts";
+import { DEFAULT_COLOR, packRgb, packRgba } from "../../common/colorUtils.ts";
 
 import type { StyleVarScope } from "./tuiStyle.ts";
 
@@ -100,6 +100,11 @@ export const STYLE_TOKEN_DEFAULTS = {
     "editorSuggestWidget.selectedForeground": packRgb(255, 255, 255),
     "editorSuggestWidget.iconForeground": packRgb(130, 170, 255),
     "editorSuggestWidget.detailForeground": packRgb(120, 120, 130),
+
+    // ── Оверлеи ──
+    // Тень попапа (`TUIElement.shadow`): полупрозрачный чёрный, композитится с
+    // тем, что под ним. Значение — дефолт VS Code для тёмных тем (`#00000059`).
+    "widget.shadow": packRgba(0, 0, 0, 0x59),
 
     // ── Виджеты редактора (диалоги, find) ──
     "editorWidget.foreground": packRgb(204, 204, 204),

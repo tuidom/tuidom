@@ -1,4 +1,4 @@
-import { BoxConstraints, Offset, Point, Rect, Size } from "../common/geometryPromitives.ts";
+import { BoxConstraints, Point, Size } from "../common/geometryPromitives.ts";
 
 import type { TUIEventBase } from "./events/tuiEventBase.ts";
 import type { TUIKeyboardEvent } from "./events/tuiKeyboardEvent.ts";
@@ -48,6 +48,13 @@ export interface OverlaySessionOptions {
      * (владелец обработает Escape сам — например закроет только верхнее подменю).
      */
     shouldCloseOnEscape?: () => boolean;
+    /**
+     * Рисовать тень под оверлеем (`TUIElement.shadow`, цвет `widget.shadow`) —
+     * TUI-аналог box-shadow попапов VS Code. Выключено по умолчанию у всех
+     * сессий, включая меню tuidom: включает хост. Не задано — остаётся
+     * `element.shadow` как выставил владелец.
+     */
+    shadow?: boolean;
 }
 
 export interface OverlaySessionHandle {
@@ -130,6 +137,7 @@ export class OverlayLayer extends TUIElement {
 
         const initialVisible = options.visible ?? false;
 
+        if (options.shadow !== undefined) element.shadow = options.shadow;
         this.addItem(element, position, false);
 
         const session: OverlaySessionState = {
@@ -314,14 +322,9 @@ export class OverlayLayer extends TUIElement {
 
             // Позиция — из localPosition (её выставил layoutChild), не из
             // item.position: после layout авторитетна геометрия элемента (Н5).
-            // Клип по границам ребёнка — инвариант отрисовки (Н2): нарисованное
-            // не выходит за layoutSize, хит-зона совпадает с видимым.
-            const child = item.element;
-            const childOffset = new Offset(child.localPosition.dx, child.localPosition.dy);
-            const clip = new Rect(child.globalPosition, child.layoutSize);
-            const childContext = context.withOffset(childOffset).withClip(clip);
-            if (childContext.clipRect.isEmpty) continue;
-            child.render(childContext);
+            // Клип по границам ребёнка и тень за ним — общий renderChild (Н2):
+            // нарисованное не выходит за layoutSize, хит-зона совпадает с видимым.
+            this.renderChild(context, item.element);
         }
     }
 
