@@ -390,7 +390,6 @@ will be generated from source — see `docs/TODO/ApiReferenceGeneration.md`.
 | **App chrome** | |
 | `BodyElement` | full-screen root: title, content slot, overlay layer |
 | `TitledPanelElement` | panel with a title row |
-| `PanelContainerElement` | tabbed bottom-panel host (Problems/Output-style views) |
 | `EditorPartElement` / `EditorTabStripElement` / `EditorTabItemElement` | editor area with a tab strip |
 | `WorkbenchLayoutElement` | sidebar + editor + bottom panel shell |
 | `SashElement` | invisible draggable splitter |
