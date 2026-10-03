@@ -13,7 +13,6 @@ import { PaddingContainerElement } from "./layout/paddingContainerElement.ts";
 import { SizedBoxElement } from "./layout/sizedBoxElement.ts";
 import { VStackElement } from "./layout/vStackElement.ts";
 import { ListViewElement } from "./list/listViewElement.ts";
-import { PanelContainerElement } from "./panel/panelContainerElement.ts";
 import { ScrollContainerElement } from "./scrollbar/scrollContainerElement.ts";
 import { ScrollViewport } from "./scrollbar/scrollViewport.ts";
 import { TitledPanelElement } from "./titledpanel/titledPanelElement.ts";
@@ -172,24 +171,6 @@ const CASES: ContainerCase[] = [
             return { container, child };
         },
     },
-    {
-        name: "PanelContainerElement (активная вкладка)",
-        build: () => {
-            const container = new PanelContainerElement();
-            const child = new TUIElement();
-            container.addView({ id: "first", title: "FIRST", content: child });
-            return { container, child };
-        },
-    },
-    {
-        name: "PanelContainerElement (actions активной вкладки)",
-        build: () => {
-            const container = new PanelContainerElement();
-            const child = new TUIElement();
-            container.addView({ id: "first", title: "FIRST", content: null, actions: child });
-            return { container, child };
-        },
-    },
 ];
 
 function rootInto(container: TUIElement): BodyElement {
@@ -226,37 +207,9 @@ describe("контракт контейнера: дети, скрытые из g
     // активации они оставались с root=null (focus/open — молчаливый no-op).
     // Закрыто структурно: root производный от цепочки родителей, скрытые дети
     // остаются в дереве с hidden=true.
-
-    it("неактивная вкладка панели укореняется при активации", () => {
-        const container = new PanelContainerElement();
-        const first = new TUIElement();
-        const second = new TUIElement();
-        container.addView({ id: "first", title: "FIRST", content: first });
-        container.addView({ id: "second", title: "SECOND", content: second });
-
-        const body = rootInto(container);
-        container.setActiveView("second");
-
-        expect(second.getRoot()).toBe(body);
-    });
-
-    it("actions вкладки, прикреплённые до укоренения, укореняются после активации", () => {
-        // Точная модель #204: restore сессии прикрепляет селектор канала к ещё
-        // не укоренённой панели; вкладка становится активной без клика.
-        const container = new PanelContainerElement();
-        const actions = new TUIElement();
-        container.addView({ id: "output", title: "OUTPUT", content: null });
-        container.setViewActions("output", actions);
-
-        const inactive = new TUIElement();
-        container.addView({ id: "other", title: "OTHER", content: inactive });
-        container.setActiveView("other");
-
-        rootInto(container); // укореняем, пока активна другая вкладка
-        container.setActiveView("output");
-
-        expect(actions.getRoot()).not.toBeNull();
-    });
+    //
+    // Кейсы вкладок панели уехали в vexx вместе с `PanelContainerElement`
+    // (виджет прикладной: его API оперировал понятиями панели IDE).
 
     it("скрытая нижняя панель укоренена вместе с layout (производный root)", () => {
         const container = new WorkbenchLayoutElement();

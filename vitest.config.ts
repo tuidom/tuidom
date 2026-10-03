@@ -11,10 +11,14 @@ export default defineConfig({
             // когда покрытие растёт (autoUpdate перезаписывает числа ниже).
             thresholds: {
                 autoUpdate: true,
-                statements: 99.15,
-                branches: 99.53,
-                functions: 98.24,
-                lines: 99.25,
+                // Числа просели на сотые доли при сносе `panel/`: виджет был
+                // покрыт целиком, и его уход уменьшил знаменатель — непокрытых
+                // строк от этого не прибавилось ни одной. Переякорено по факту,
+                // а не опущено под недостающие тесты.
+                statements: 99.13,
+                branches: 99.52,
+                functions: 98.2,
+                lines: 99.23,
             },
             reporter: ["text", "lcov", "json", "json-summary", "text-summary"],
             include: ["packages/*/src/**/*.ts"],
