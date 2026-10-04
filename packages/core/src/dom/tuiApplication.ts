@@ -126,15 +126,20 @@ export class TuiApplication {
     /**
      * Schedules a deferred render via setImmediate.
      * Batches multiple markDirty() calls into a single frame.
-     * Skips rendering if layout is already clean (e.g. a synchronous
+     * Skips rendering if there is nothing to repaint (e.g. a synchronous
      * renderFrame from handleInput already ran).
+     *
+     * Гейт — {@link TUIElement.needsRepaint}, а не layout-грязь: layout снимает
+     * кто угодно (ленивый фоллбэк `layoutSize` у хит-теста мыши, инспектора,
+     * измеряющего виджета), и гейт по ней ронял уже запланированный кадр
+     * насовсем — экран ретейн-буфер, старые ячейки так и оставались на нём.
      */
     public scheduleRender(): void {
         if (this.renderScheduled) return;
         this.renderScheduled = true;
         setImmediate(() => {
             this.renderScheduled = false;
-            if (this.root?.isLayoutDirty) {
+            if (this.root?.needsRepaint === true) {
                 this.renderFrame();
             }
         });
@@ -220,9 +225,14 @@ export class TuiApplication {
      * жгли CPU впустую. Стилевые изменения гейт проходят: markStyleDirty
      * заканчивается markDirty. Синхронность оставлена намеренно: тесты и
      * обработчики читают экран/геометрию сразу после события.
+     *
+     * Гейт — {@link TUIElement.needsRepaint} (см. {@link scheduleRender}): сам
+     * хит-тест мыши читает `layoutSize` и гасит layout-грязь, так что гейт по
+     * ней терял кадр, помеченный ДО этого события (например ответ субпроцесса,
+     * пришедший между press и release одного клика).
      */
     private renderAfterInput(): void {
-        if (this.root?.isLayoutDirty) {
+        if (this.root?.needsRepaint === true) {
             this.renderFrame();
         }
     }

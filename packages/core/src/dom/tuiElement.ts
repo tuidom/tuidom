@@ -292,6 +292,31 @@ export class TUIElement {
     // Только на корне: rect'ы поддеревьев, отцеплённых с последнего кадра.
     private pendingDetachDamage: Rect[] = [];
 
+    /**
+     * Есть ли что отдать следующему кадру в этом поддереве: кто-то просил
+     * перерисовку ({@link markDirty}) или отцепил поддерево, и кадра с тех пор
+     * не было.
+     *
+     * Это — и только это — гейт отложенного кадра (`TuiApplication`
+     * `scheduleRender`) и кадра после ввода. В отличие от
+     * {@link isLayoutDirty}, снимается ТОЛЬКО damage-обходом настоящего кадра
+     * ({@link collectDamage}): layout снимает кто угодно — ленивый фоллбэк
+     * геттера {@link layoutSize} зовут хит-тест мыши
+     * ({@link elementFromPoint}), инспектор и любой виджет, измеряющий соседа.
+     * Пока гейтом была layout-грязь, такой читатель гасил флаг посреди
+     * ожидания, и запланированный кадр не состоялся вовсе — а экран
+     * ретейн-буфер, так что старые ячейки оставались на нём до следующей
+     * несвязанной перерисовки.
+     */
+    public get needsRepaint(): boolean {
+        return (
+            this.isPaintDirty ||
+            this.hasPaintDirtyDescendant ||
+            this.isLayoutDirty ||
+            this.pendingDetachDamage.length > 0
+        );
+    }
+
     protected _parent: TUIElement | null = null;
     // Якорь дерева: выставляется setAsRoot() (BodyElement, тестовые корни).
     // Сам root НЕ кэшируется — getRoot() выводит его из цепочки родителей.
