@@ -145,4 +145,36 @@ describe("ListViewElement virtualization", () => {
         expect(rows[0].getParent()!.isLayoutDirty).toBe(false);
         expect(rows[5].getParent()!.isLayoutDirty).toBe(true);
     });
+
+    it("курсор, поставленный по старому узкому окну, не прячет верхние строки, когда окно выросло", () => {
+        // Переиспользуемый пикер (vexx/diode quick pick): новые пункты и курсор
+        // ставятся ДО показа, а окно ещё помнит размер прошлого показа.
+        // ensureVisible считал по нему и проматывал — после роста окна первый
+        // пункт пропадал при свободных строках снизу.
+        const { list, rows } = makeList(3);
+        const app = TestApp.createWithContent(list, new Size(20, 1));
+        list.setCursorTo("r2");
+        expect(list.scrollTop).toBe(2);
+
+        app.backend.resize(new Size(20, 5));
+        app.render();
+
+        expect(list.scrollTop).toBe(0);
+        expect(rows[0].globalPosition.y).toBe(0);
+        expect(list.getCursorElement()).toBe(rows[2]);
+    });
+
+    it("смещение клампится по выросшему окну, но держит курсор, когда строк больше окна", () => {
+        const { list } = makeList(10);
+        const app = TestApp.createWithContent(list, new Size(20, 3));
+        list.setCursorTo("r9");
+        app.render();
+        expect(list.scrollTop).toBe(7);
+
+        app.backend.resize(new Size(20, 6));
+        app.render();
+
+        // Окно 6 из 10 строк: максимум смещения 4, курсор на последней всё ещё виден.
+        expect(list.scrollTop).toBe(4);
+    });
 });

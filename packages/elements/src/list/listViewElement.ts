@@ -390,6 +390,11 @@ export class ListViewElement extends ScrollableElement {
     protected override performLayout(constraints: BoxConstraints): Size {
         const size = super.performLayout(constraints);
         const rows = this.ensureProjection();
+        // Смещение, выставленное до раскладки (курсор поставили, пока окна ещё не
+        // было или оно было меньше) либо пережившее рост окна, может оказаться
+        // больше допустимого: строки сверху спрятаны, а снизу пусто. Клампим по
+        // фактическому окну — как `scrollTo`, но без markDirty: идёт layout.
+        this.scrollTop = Math.min(this.scrollTop, Math.max(0, rows.length - size.height));
         const start = this.scrollTop;
         const end = Math.min(rows.length, start + size.height);
         const listFocused = this.isFocused;
