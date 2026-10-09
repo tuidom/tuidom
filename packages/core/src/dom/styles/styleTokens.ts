@@ -92,6 +92,10 @@ export const STYLE_TOKEN_DEFAULTS = {
     // ── Квик-пик ──
     descriptionForeground: packRgb(125, 125, 125),
 
+    // ── Недоступные элементы (пункт меню с `disabled`) ──
+    // Dark+ `#CCCCCC80` поверх фона меню.
+    disabledForeground: packRgb(121, 121, 121),
+
     // ── Автодополнение ──
     "editorSuggestWidget.border": packRgb(83, 83, 83),
     "editorSuggestWidget.background": packRgb(34, 34, 40),

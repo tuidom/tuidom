@@ -38,7 +38,10 @@ export class PopupMenuItemElement extends CompositeElement {
         // фон раскрытого списка (dropdown.listBackground) одним style на корне
         // попапа; выделение — when-вариант с токенами menu.selection*.
         this.style = {
-            when: [{ states: ["selected"], fg: "menu.selectionForeground", bg: "menu.selectionBackground" }],
+            when: [
+                { states: ["selected"], fg: "menu.selectionForeground", bg: "menu.selectionBackground" },
+                { states: ["disabled"], fg: "disabledForeground" },
+            ],
         };
 
         const row = new HFlexElement();
@@ -58,7 +61,10 @@ export class PopupMenuItemElement extends CompositeElement {
             const shortcutLabel = new TextLabelElement("  " + this.shortcut);
             shortcutLabel.style = {
                 fg: "menu.shortcutForeground",
-                when: [{ states: ["in:selected"], fg: "menu.selectionForeground" }],
+                when: [
+                    { states: ["in:selected"], fg: "menu.selectionForeground" },
+                    { states: ["in:disabled"], fg: "disabledForeground" },
+                ],
             };
             row.addChild(shortcutLabel, { width: hflexFit(), height: "fill" });
         }
@@ -72,6 +78,15 @@ export class PopupMenuItemElement extends CompositeElement {
 
     public set selected(value: boolean) {
         this.setStyleState("selected", value);
+    }
+
+    /** Недоступный пункт — цвет `disabledForeground` (поведение держит меню). */
+    public get disabled(): boolean {
+        return this.hasStyleState("disabled");
+    }
+
+    public set disabled(value: boolean) {
+        this.setStyleState("disabled", value);
     }
 }
 
