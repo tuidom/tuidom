@@ -36,6 +36,13 @@ export class TreeViewElement<T> extends ScrollableElement {
     private cutKeys = new Set<string>();
     private maxRowWidth = 0;
     /**
+     * Ширина метки в колонках по тексту — между пересборками плоского списка.
+     * `new DisplayLine` на каждую строку каждой пересборки был основной ценой
+     * раскрытия на больших деревьях. Поколенческий: пересборка переносит в
+     * новый кэш только встретившиеся метки, поэтому он не растёт без предела.
+     */
+    private labelWidths = new Map<string, number>();
+    /**
      * Отступ контента строк от левого края элемента. В отличие от внешнего
      * паддинг-контейнера, входит в саму строку, поэтому фон курсора/выделения
      * заливает строку от края, а текст начинается со сдвигом.
@@ -74,7 +81,7 @@ export class TreeViewElement<T> extends ScrollableElement {
         if (element !== undefined) {
             const key = this.provider.getKey(element);
             this.invalidateSubtreeCache(key);
-            await this.reloadExpandedChildren(key);
+            await this.reloadExpandedChildren(element);
         } else {
             this.childrenCache.clear();
             await this.loadRootChildren();
@@ -104,8 +111,23 @@ export class TreeViewElement<T> extends ScrollableElement {
 
     /** Раскрывает узел (идемпотентно, без прокрутки/выделения) и перестраивает список. */
     public async expand(element: T): Promise<void> {
-        if (this.expandedKeys.has(this.provider.getKey(element))) return;
-        await this.expandElement(element);
+        await this.expandElements([element]);
+    }
+
+    /**
+     * Раскрывает несколько узлов разом (идемпотентно, без прокрутки/выделения)
+     * и перестраивает список один раз. Для «раскрыть все N» вместо N вызовов
+     * {@link expand}: каждый из них пересобирает весь плоский список, и на
+     * тысячах узлов это квадратичная цена.
+     */
+    public async expandElements(elements: readonly T[]): Promise<void> {
+        let changed = false;
+        for (const element of elements) {
+            if (this.expandedKeys.has(this.provider.getKey(element))) continue;
+            await this.expandElement(element);
+            changed = true;
+        }
+        if (!changed) return;
         this.rebuildFlatList();
         this.markDirty();
     }
@@ -369,31 +391,31 @@ export class TreeViewElement<T> extends ScrollableElement {
 
     // ─── Private: data loading ───
 
+    /**
+     * Перечитывает корень и раскрытые поддеревья обходом от корня: раскрытый
+     * узел, до которого обход не дошёл (свёрнут предок или узла больше нет),
+     * в плоском списке всё равно не виден. Обход вместо поиска каждого
+     * раскрытого ключа по плоскому списку — иначе `refresh()` квадратичен по
+     * числу раскрытых узлов.
+     */
     private async loadRootChildren(): Promise<void> {
         const rootChildren = await this.provider.getChildren();
         this.childrenCache.set("__root__", rootChildren);
 
-        for (const key of this.expandedKeys) {
-            await this.reloadExpandedChildren(key);
+        for (const child of rootChildren) {
+            await this.reloadExpandedChildren(child);
         }
     }
 
-    private async reloadExpandedChildren(key: string): Promise<void> {
+    private async reloadExpandedChildren(element: T): Promise<void> {
+        const key = this.provider.getKey(element);
         if (!this.expandedKeys.has(key)) return;
 
-        const node = this.findElementByKey(key);
-        /* v8 ignore start -- unreachable: findElementByKey always resolves an expanded key (see its own v8-ignore note) */
-        if (node === null) return;
-        /* v8 ignore stop */
-
-        const children = await this.provider.getChildren(node);
+        const children = await this.provider.getChildren(element);
         this.childrenCache.set(key, children);
 
         for (const child of children) {
-            const childKey = this.provider.getKey(child);
-            if (this.expandedKeys.has(childKey)) {
-                await this.reloadExpandedChildren(childKey);
-            }
+            await this.reloadExpandedChildren(child);
         }
     }
 
@@ -416,16 +438,31 @@ export class TreeViewElement<T> extends ScrollableElement {
         const rootChildren = this.childrenCache.get("__root__");
         if (!rootChildren) return;
 
-        this.appendChildren(rootChildren, 0, null);
+        const previousWidths = this.labelWidths;
+        const labelWidths = new Map<string, number>();
+        this.appendChildren(rootChildren, 0, null, previousWidths, labelWidths);
+        this.labelWidths = labelWidths;
     }
 
-    private appendChildren(children: T[], depth: number, parentKey: string | null): void {
+    private appendChildren(
+        children: T[],
+        depth: number,
+        parentKey: string | null,
+        previousWidths: Map<string, number>,
+        labelWidths: Map<string, number>,
+    ): void {
         for (const element of children) {
             const key = this.provider.getKey(element);
             const item = this.provider.getTreeItem(element);
             this.flatNodes.push({ element, depth, item, parentKey });
 
-            const rowWidth = this.calculateRowWidth(depth, item);
+            let labelWidth = labelWidths.get(item.label);
+            if (labelWidth === undefined) {
+                labelWidth = previousWidths.get(item.label) ?? new DisplayLine(item.label).displayWidth;
+                labelWidths.set(item.label, labelWidth);
+            }
+            // indent + expandIcon + space + icon + space + label
+            const rowWidth = this.rowIndentX(depth) + 2 + (item.icon ? 2 : 0) + labelWidth;
             if (rowWidth > this.maxRowWidth) {
                 this.maxRowWidth = rowWidth;
             }
@@ -434,7 +471,7 @@ export class TreeViewElement<T> extends ScrollableElement {
                 const cachedChildren = this.childrenCache.get(key);
                 /* v8 ignore start -- defensive: an expanded key always has its children cached (cache and expandedKeys stay in sync) */
                 if (cachedChildren) {
-                    this.appendChildren(cachedChildren, depth + 1, key);
+                    this.appendChildren(cachedChildren, depth + 1, key, previousWidths, labelWidths);
                 }
                 /* v8 ignore stop */
             }
@@ -444,11 +481,6 @@ export class TreeViewElement<T> extends ScrollableElement {
     /** Колонка (в координатах контента), с которой начинается строка узла данной глубины. */
     private rowIndentX(depth: number): number {
         return this.leftPadding + depth * INDENT_SIZE;
-    }
-
-    private calculateRowWidth(depth: number, item: ITreeItem): number {
-        // indent + expandIcon + space + icon + space + label
-        return this.rowIndentX(depth) + 2 + (item.icon ? 2 : 0) + new DisplayLine(item.label).displayWidth;
     }
 
     private formatRow(node: FlatTreeNode<T>): string {
@@ -575,27 +607,6 @@ export class TreeViewElement<T> extends ScrollableElement {
         } else if (index >= this.scrollTop + viewportHeight) {
             this.scrollTo(this.scrollLeft, index - viewportHeight + 1);
         }
-    }
-
-    // ─── Private: key helpers ───
-
-    private findElementByKey(key: string): T | null {
-        for (const node of this.flatNodes) {
-            if (this.provider.getKey(node.element) === key) {
-                return node.element;
-            }
-        }
-        /* v8 ignore start -- unreachable: findElementByKey is only called with keys of currently-flattened (visible) nodes, which the loop above always finds */
-        // Search in cache values too
-        for (const children of this.childrenCache.values()) {
-            for (const child of children) {
-                if (this.provider.getKey(child) === key) {
-                    return child;
-                }
-            }
-        }
-        return null;
-        /* v8 ignore stop */
     }
 
     // ─── Private: input handlers ───
