@@ -150,6 +150,17 @@ describe("PopupMenuItemElement", () => {
         });
     });
 
+    describe("disabled state", () => {
+        it("disabled getter reflects the assigned value", () => {
+            const item = new PopupMenuItemElement("Stop", simpleConfig);
+            expect(item.disabled).toBe(false);
+            item.disabled = true;
+            expect(item.disabled).toBe(true);
+            item.disabled = false;
+            expect(item.disabled).toBe(false);
+        });
+    });
+
     describe("selected state", () => {
         it("selected getter reflects the assigned value", () => {
             const item = new PopupMenuItemElement("Cut", simpleConfig);

@@ -22,6 +22,12 @@ export interface MenuItemEntry {
      */
     id?: string;
     onSelect?: () => void;
+    /**
+     * Недоступный пункт (`precondition` эталона VS Code): рисуется
+     * `disabledForeground`, стрелки его пропускают, клик, Enter и ховер
+     * ничего не делают.
+     */
+    disabled?: boolean;
 }
 
 export interface MenuSeparatorEntry {
@@ -47,6 +53,11 @@ function isSeparator(entry: MenuEntry): entry is MenuSeparatorEntry {
 
 function isSubmenu(entry: MenuEntry): entry is MenuSubmenuEntry {
     return entry.type === "submenu";
+}
+
+/** Строка, на которую можно встать выделением: не разделитель и не недоступный пункт. */
+function isSelectable(entry: MenuEntry): boolean {
+    return !isSeparator(entry) && (isSubmenu(entry) || entry.disabled !== true);
 }
 
 /** Индикатор строки-подменю (рисуется в колонке шортката). */
@@ -81,7 +92,7 @@ export class PopupMenuElement extends TUIElement {
         super();
         this.style = { fg: "menu.foreground", bg: "menu.background" };
         this.entries = entries;
-        this.selectableIndices = entries.map((e, i) => (isSeparator(e) ? -1 : i)).filter((i) => i >= 0);
+        this.selectableIndices = entries.map((e, i) => (isSelectable(e) ? i : -1)).filter((i) => i >= 0);
         this.selectedIndex = this.selectableIndices.length > 0 ? this.selectableIndices[0] : -1;
 
         const config = this.computeConfig();
@@ -106,10 +117,14 @@ export class PopupMenuElement extends TUIElement {
                 this.vstack.addChild(item, { width: "stretch", height: 1 });
             } else {
                 const item = new PopupMenuItemElement(entry.label, config, entry.shortcut, entry.icon);
-                item.onSelect = entry.onSelect;
-                item.onHover = () => {
-                    this.selectByEntryIndex(entryIndex);
-                };
+                if (entry.disabled === true) {
+                    item.disabled = true;
+                } else {
+                    item.onSelect = entry.onSelect;
+                    item.onHover = () => {
+                        this.selectByEntryIndex(entryIndex);
+                    };
+                }
                 this.itemElements.push(item);
                 this.vstack.addChild(item, { width: "stretch", height: 1 });
             }
