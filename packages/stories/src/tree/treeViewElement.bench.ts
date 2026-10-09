@@ -63,3 +63,45 @@ describe("TreeViewElement — toggleExpand rebuild", () => {
         await toggleTree.toggleExpand(toggleTarget); // collapse
     });
 });
+
+// ─── Раскрыть все узлы верхнего уровня (форма вкладки Problems) ─────────────
+//
+// Файлы × маркеры: на монорепе языковой сервер даёт ~1.7k файлов и ~24k маркеров,
+// и вкладка раскрывает каждый файл. Поштучный expand() пересобирал весь плоский
+// список на каждый узел — минуты; expandElements() пересобирает один раз.
+
+interface ProblemsNode {
+    file: number;
+    marker?: number;
+}
+
+const PROBLEM_FILES = 1_000;
+const MARKERS_PER_FILE = 14;
+const problemsProvider = {
+    getChildren: (element?: ProblemsNode): ProblemsNode[] =>
+        element === undefined
+            ? Array.from({ length: PROBLEM_FILES }, (_, file) => ({ file }))
+            : element.marker === undefined
+              ? Array.from({ length: MARKERS_PER_FILE }, (_, marker) => ({ file: element.file, marker }))
+              : [],
+    getKey: (element: ProblemsNode): string =>
+        element.marker === undefined
+            ? `f${String(element.file)}`
+            : `m${String(element.file)}:${String(element.marker)}`,
+    getTreeItem: (element: ProblemsNode) =>
+        element.marker === undefined
+            ? { label: `File${String(element.file)}.java  (${String(MARKERS_PER_FILE)})`, collapsible: true }
+            : {
+                  label: `The import com.example.foo${String(element.marker)} cannot be resolved  [Ln ${String(element.marker)}, Col 1]`,
+                  collapsible: false,
+                  icon: "",
+              },
+};
+
+describe("TreeViewElement — expand all top-level nodes (Problems shape)", () => {
+    bench(`expandElements(${String(PROBLEM_FILES)} files × ${String(MARKERS_PER_FILE)})`, async () => {
+        const tree = new TreeViewElement(problemsProvider);
+        await tree.refresh();
+        await tree.expandElements(problemsProvider.getChildren());
+    });
+});
