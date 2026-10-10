@@ -3,6 +3,21 @@ import type { KeyPressEvent } from "../input/keyEvent.ts";
 import type { MouseToken } from "../input/rawTerminalToken.ts";
 import type { Grid } from "../rendering/grid.ts";
 
+/** Colors the host terminal reported ({@link ITerminalBackend.probeHostColors}); packed RGB. */
+export interface HostTerminalColors {
+    readonly foreground: number | undefined;
+    readonly background: number | undefined;
+    /** ANSI palette 0..15 (always 16 entries); `undefined` — this entry wasn't reported. */
+    readonly ansi: readonly (number | undefined)[];
+}
+
+/** The terminal reported none of its colors — the answer of a backend without a terminal. */
+export const NO_HOST_COLORS: HostTerminalColors = Object.freeze({
+    foreground: undefined,
+    background: undefined,
+    ansi: Object.freeze(new Array<undefined>(16).fill(undefined)),
+});
+
 /**
  * Unified abstraction over terminal I/O.
  *
@@ -44,6 +59,17 @@ export interface ITerminalBackend {
      * Fire-and-forget — callers must not block on it.
      */
     probeTerminalVersion(onResult: (nameAndVersion: string | undefined) => void): void;
+
+    /**
+     * Asynchronously ask the terminal for its own colors: the default foreground and
+     * background (OSC 10/11) and the 16 ANSI palette entries (OSC 4, indices 0..15).
+     * `onResult` fires exactly once; every color the terminal didn't report (no OSC
+     * support, GNU Screen, timeout) is `undefined`, so callers fall back per entry.
+     * Replies are consumed by the backend: they still reach `onOscResponse`, never
+     * `onInput`. Inside tmux the queries go to tmux itself, which answers from the
+     * outer terminal (tmux ≥ 3.4 for fg/bg, ≥ 3.6 for the palette). Fire-and-forget.
+     */
+    probeHostColors(onResult: (colors: HostTerminalColors) => void): void;
 
     /**
      * Render a frame: receive the current grid and cursor position.

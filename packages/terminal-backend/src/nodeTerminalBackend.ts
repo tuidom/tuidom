@@ -1,4 +1,5 @@
-import type { ITerminalBackend } from "@tuidom/core/backend/iTerminalBackend";
+import type { HostTerminalColors, ITerminalBackend } from "@tuidom/core/backend/iTerminalBackend";
+import { parseXColor } from "@tuidom/core/common/colorUtils";
 import { Point, Size } from "@tuidom/core/common/geometryPromitives";
 import type { KeyPressEvent } from "@tuidom/core/input/keyEvent";
 import { KeyInputParser } from "@tuidom/core/input/keyInputParser";
@@ -7,7 +8,7 @@ import type { DeviceReportKind, MouseToken } from "@tuidom/core/input/rawTermina
 import { Grid } from "@tuidom/core/rendering/grid";
 import { TerminalRenderer } from "@tuidom/core/rendering/terminalRenderer";
 
-import { isInsideTmux } from "./terminalEnv.ts";
+import { isInsideGnuScreen, isInsideTmux } from "./terminalEnv.ts";
 
 /**
  * Kitty Keyboard Protocol escape sequences.
@@ -62,6 +63,27 @@ const PROBE_TIMEOUT_MS = 200;
  */
 const XTVERSION_QUERY = "\x1b[>0q";
 
+/** How many ANSI palette entries the host-colors probe asks for (0..15). */
+const ANSI_COLOR_COUNT = 16;
+
+/**
+ * Host-colors probe: default fg/bg (OSC 10/11) and the 16 ANSI entries (OSC 4), each
+ * entry its own query — Konsole answers only the first index of a multi-index OSC 4,
+ * and tmux drops a palette reply for an index it didn't expect. ST-terminated; replies
+ * may end with BEL or ST either way (the tokenizer takes both).
+ */
+const HOST_COLORS_QUERY =
+    "\x1b]10;?\x1b\\\x1b]11;?\x1b\\" +
+    Array.from({ length: ANSI_COLOR_COUNT }, (_, index) => `\x1b]4;${String(index)};?\x1b\\`).join("");
+
+/**
+ * Inside tmux DA1 is no sentinel for the host-colors probe: tmux answers DA1 at once,
+ * but a palette entry it hasn't set itself it forwards to the outer terminal and relays
+ * the reply later (tmux ≥ 3.6; its own wait is 500 ms). There we settle on the last
+ * expected reply or on this timeout.
+ */
+const TMUX_HOST_COLORS_TIMEOUT_MS = 600;
+
 /**
  * How long to hold a partial escape sequence that arrived at the end of a stdin read,
  * waiting for the rest to follow (it does, on a split keypress over SSH/tmux). If nothing
@@ -85,6 +107,27 @@ const PARTIAL_INPUT_FLUSH_MS = 50;
 function wrapForTmux(sequence: string): string {
     const escaped = sequence.replace(/\x1b/g, "\x1b\x1b");
     return `\x1bPtmux;${escaped}\x1b\\`;
+}
+
+/**
+ * A reply to the host-colors probe: `OSC 10;<color>` / `OSC 11;<color>` (fg/bg) or
+ * `OSC 4;<index>;<color>` for one of the 16 ANSI entries. Anything else (OSC 52, a
+ * palette index past 15, an unparsable color) is `undefined` — not ours to count.
+ */
+function parseHostColorReply(
+    code: number,
+    data: string,
+): { slot: "foreground" | "background" | number; color: number } | undefined {
+    if (code === 10 || code === 11) {
+        const color = parseXColor(data);
+        return color === undefined ? undefined : { slot: code === 10 ? "foreground" : "background", color };
+    }
+    if (code !== 4) return undefined;
+    const match = /^(\d+);(.*)$/.exec(data);
+    if (match === null) return undefined;
+    const index = Number(match[1]);
+    const color = parseXColor(match[2]);
+    return index < ANSI_COLOR_COUNT && color !== undefined ? { slot: index, color } : undefined;
 }
 
 /**
@@ -114,6 +157,7 @@ export class NodeTerminalBackend implements ITerminalBackend {
     private resizePending = false;
     private cleanupHandlers: (() => void)[] = [];
     private readonly isTmux: boolean;
+    private readonly isGnuScreen: boolean;
     private readonly inputParser = new KeyInputParser();
     private readonly renderer: TerminalRenderer;
     /**
@@ -134,6 +178,7 @@ export class NodeTerminalBackend implements ITerminalBackend {
         this.stdout = stdout;
         this.resizeThrottleMs = options?.resizeThrottleMs ?? 100;
         this.isTmux = isInsideTmux();
+        this.isGnuScreen = isInsideGnuScreen();
         this.renderer = new TerminalRenderer(this.frameBuffer);
     }
 
@@ -217,17 +262,58 @@ export class NodeTerminalBackend implements ITerminalBackend {
         );
     }
 
+    public probeHostColors(onResult: (colors: HostTerminalColors) => void): void {
+        const ansi = new Array<number | undefined>(ANSI_COLOR_COUNT).fill(undefined);
+        let foreground: number | undefined;
+        let background: number | undefined;
+        const finish = (): void => {
+            onResult({ foreground, background, ansi });
+        };
+        // GNU Screen doesn't answer color queries and doesn't pass them on — don't send them.
+        if (this.isGnuScreen) {
+            finish();
+            return;
+        }
+        let settled = false;
+        // Distinct slots: a repeated reply for the same entry doesn't bring the end closer.
+        const reported = new Set<"foreground" | "background" | number>();
+        // Direct, like the other probes: inside tmux it's tmux that answers for its pane.
+        const settle = this.probe(
+            HOST_COLORS_QUERY,
+            () => {
+                /* only OSC replies matter here */
+            },
+            () => {
+                settled = true;
+                finish();
+            },
+            this.isTmux ? { untilDa1: false, timeoutMs: TMUX_HOST_COLORS_TIMEOUT_MS } : undefined,
+        );
+        this.oscResponseCallbacks.push((code, data) => {
+            if (settled) return;
+            const reply = parseHostColorReply(code, data);
+            if (reply === undefined) return;
+            if (reply.slot === "foreground") foreground = reply.color;
+            else if (reply.slot === "background") background = reply.color;
+            else ansi[reply.slot] = reply.color;
+            reported.add(reply.slot);
+            if (reported.size === 2 + ANSI_COLOR_COUNT) settle();
+        });
+    }
+
     /**
      * Send `query` followed by DA1 and collect device reports until *our* DA1 reply
      * arrives (or the timeout fires), then call `finish` exactly once. Replies come back
      * in request order, so the n-th DA1 reply closes the n-th probe — two probes in
-     * flight don't settle each other early.
+     * flight don't settle each other early. `untilDa1: false` leaves only the timeout
+     * (and the returned early-settle function) to close the probe.
      */
     private probe(
         query: string,
         onReport: (report: DeviceReportKind, params: string) => void,
         finish: () => void,
-    ): void {
+        options: { untilDa1: boolean; timeoutMs: number } = { untilDa1: true, timeoutMs: PROBE_TIMEOUT_MS },
+    ): () => void {
         const myDa1 = ++this.da1Sent;
         let settled = false;
         let timer: ReturnType<typeof setTimeout> | null = null;
@@ -240,10 +326,11 @@ export class NodeTerminalBackend implements ITerminalBackend {
         this.deviceReportCallbacks.push((report, params) => {
             if (settled) return;
             if (report !== "da1") onReport(report, params);
-            else if (this.da1Received >= myDa1) settle(); // our DA1 reply = all replies are in
+            else if (options.untilDa1 && this.da1Received >= myDa1) settle(); // our DA1 reply = all replies are in
         });
         this.writeDirect(query + DA1_QUERY);
-        timer = setTimeout(settle, PROBE_TIMEOUT_MS);
+        timer = setTimeout(settle, options.timeoutMs);
+        return settle;
     }
 
     /** Fan a parsed input batch out to the registered callbacks. */

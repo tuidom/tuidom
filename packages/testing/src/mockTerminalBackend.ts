@@ -1,4 +1,4 @@
-import type { ITerminalBackend } from "@tuidom/core/backend/iTerminalBackend";
+import { type HostTerminalColors, type ITerminalBackend, NO_HOST_COLORS } from "@tuidom/core/backend/iTerminalBackend";
 import { DEFAULT_COLOR } from "@tuidom/core/common/colorUtils";
 import { Point, Size } from "@tuidom/core/common/geometryPromitives";
 import type { KeyPressEvent } from "@tuidom/core/input/keyEvent";
@@ -83,6 +83,17 @@ export class MockTerminalBackend implements ITerminalBackend {
     /** Answers synchronously with {@link terminalVersion} — no terminal round-trip to wait for. */
     public probeTerminalVersion(onResult: (nameAndVersion: string | undefined) => void): void {
         onResult(this.terminalVersion);
+    }
+
+    /**
+     * What {@link probeHostColors} reports. Default: the terminal reported nothing.
+     * Set it before the app probes.
+     */
+    public hostColors: HostTerminalColors = NO_HOST_COLORS;
+
+    /** Answers synchronously with {@link hostColors} — no terminal round-trip to wait for. */
+    public probeHostColors(onResult: (colors: HostTerminalColors) => void): void {
+        onResult(this.hostColors);
     }
 
     public cursorPosition: Point = new Point(0, 0);

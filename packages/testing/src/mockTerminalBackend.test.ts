@@ -1,3 +1,4 @@
+import { NO_HOST_COLORS } from "@tuidom/core/backend/iTerminalBackend";
 import { DEFAULT_COLOR, packRgb } from "@tuidom/core/common/colorUtils";
 import { Point, Size } from "@tuidom/core/common/geometryPromitives";
 import type { KeyPressEvent } from "@tuidom/core/input/keyEvent";
@@ -297,5 +298,17 @@ describe("MockTerminalBackend", () => {
         const onResult = vi.fn();
         backend.probeTerminalVersion(onResult);
         expect(onResult).toHaveBeenCalledExactlyOnceWith("iTerm2 3.5.0");
+    });
+
+    it("probeHostColors по умолчанию — ничего не сообщено; отвечает настроенным hostColors, синхронно", () => {
+        const backend = new MockTerminalBackend();
+        const onResult = vi.fn();
+        backend.probeHostColors(onResult);
+        expect(onResult).toHaveBeenCalledExactlyOnceWith(NO_HOST_COLORS);
+
+        const colors = { foreground: 0xcccccc, background: undefined, ansi: NO_HOST_COLORS.ansi };
+        backend.hostColors = colors;
+        backend.probeHostColors(onResult);
+        expect(onResult).toHaveBeenLastCalledWith(colors);
     });
 });

@@ -126,6 +126,30 @@ export function parseHexColor(hex: string): number {
 }
 
 /**
+ * Разбирает цвет в формате X11, которым терминалы отвечают на OSC 4/10/11
+ * (`XParseColor`): `rgb:R/G/B` с 1–4 hex-цифрами на канал (обычно 4 —
+ * `rgb:ffff/8080/0000`) и устаревший `#RGB`/`#RRGGBB`/`#RRRGGGBBB`/`#RRRRGGGGBBBB`.
+ * Канал масштабируется к 8 битам по своей разрядности. Непонятная строка —
+ * `undefined`: ответ терминала — внешние данные, бросать на них нельзя.
+ */
+export function parseXColor(spec: string): number | undefined {
+    const rgb = /^rgb:([0-9a-f]{1,4})\/([0-9a-f]{1,4})\/([0-9a-f]{1,4})$/i.exec(spec);
+    if (rgb !== null) return packRgb(scaleXChannel(rgb[1]), scaleXChannel(rgb[2]), scaleXChannel(rgb[3]));
+    const hash = /^#((?:[0-9a-f]{3}){1,4})$/i.exec(spec);
+    if (hash === null) return undefined;
+    const digits = hash[1];
+    const width = digits.length / 3;
+    const channel = (i: number): number => scaleXChannel(digits.slice(i * width, (i + 1) * width));
+    return packRgb(channel(0), channel(1), channel(2));
+}
+
+/** Канал X11-цвета из `digits.length` hex-цифр → 0..255 (`f` → 255, `ffff` → 255, `8080` → 128). */
+function scaleXChannel(digits: string): number {
+    const max = 16 ** digits.length - 1;
+    return Math.round((parseInt(digits, 16) * 255) / max);
+}
+
+/**
  * Обратное к {@link parseHexColor}: `#rrggbb` для непрозрачного, `#rrggbbaa`
  * с альфой, `#00000000` для {@link TRANSPARENT_COLOR}. `DEFAULT_COLOR` hex не
  * имеет — throw.
