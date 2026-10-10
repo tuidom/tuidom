@@ -14,6 +14,7 @@ interface TestNode {
     id: string;
     segments?: string[];
     label: string;
+    icon?: string;
     children?: TestNode[];
 }
 
@@ -23,6 +24,7 @@ function createProvider(roots: TestNode[]): ITreeDataProvider<TestNode> {
             return {
                 label: element.label,
                 labelSegments: element.segments,
+                icon: element.icon,
                 collapsible: (element.children?.length ?? 0) > 0,
             };
         },
@@ -181,5 +183,48 @@ describe("TreeViewElement - compact row segments", () => {
         tree.setSegmentIndex(roots[1], 0);
         key(tree, "ArrowDown");
         expect(tree.focusPreviousSegment()).toBe(false);
+    });
+
+    it("an empty tree has no cursor segment to move", async () => {
+        const { tree } = await createTree([]);
+        expect(tree.focusNextSegment()).toBe(false);
+    });
+
+    it("setting the current segment again does not fire onSegmentChanged", async () => {
+        const { tree, roots } = await createTree();
+        const changed = vi.fn();
+        tree.onSegmentChanged = changed;
+        tree.setSegmentIndex(roots[0], 2);
+        tree.setSegmentIndex(roots[0], 5);
+        expect(changed).not.toHaveBeenCalled();
+    });
+
+    it("hover underlines the segment under the mouse on a non-cursor row", async () => {
+        const roots = compactRoots();
+        roots.unshift({ id: "top", label: "top" });
+        const { tree } = await createTree(roots);
+        const move = (x: number, y: number) =>
+            new TUIMouseEvent("mousemove", { button: "left", screenX: x, screenY: y, localX: x, localY: y });
+
+        tree.dispatchEvent(move(8, 1));
+        expect(underlineMask(render(tree), 1)).toBe("\uF105 src/____/java");
+        // Мимо сегментов (разделитель) — ничего не подчёркнуто.
+        tree.dispatchEvent(move(5, 1));
+        expect(underlineMask(render(tree), 1)).toBe("\uF105 src/main/java");
+        tree.dispatchEvent(
+            new TUIMouseEvent("mouseleave", { button: "left", screenX: 0, screenY: 0, localX: 0, localY: 0 }),
+        );
+        expect(underlineMask(render(tree), 1)).toBe("\uF105 src/main/java");
+    });
+
+    it("segment columns start after the row icon", async () => {
+        const roots = compactRoots();
+        roots[0].icon = "D";
+        const { tree } = await createTree(roots);
+        expect(underlineMask(render(tree), 0)).toBe("\uF105 D src/main/____");
+        tree.dispatchEvent(
+            new TUIMouseEvent("click", { button: "left", screenX: 4, screenY: 0, localX: 4, localY: 0 }),
+        );
+        expect(tree.getSegmentIndex(roots[0])).toBe(0);
     });
 });

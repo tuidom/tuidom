@@ -15,10 +15,10 @@ export default defineConfig({
                 // покрыт целиком, и его уход уменьшил знаменатель — непокрытых
                 // строк от этого не прибавилось ни одной. Переякорено по факту,
                 // а не опущено под недостающие тесты.
-                statements: 99.22,
-                branches: 99.55,
-                functions: 98.3,
-                lines: 99.31,
+                statements: 99.23,
+                branches: 99.56,
+                functions: 98.34,
+                lines: 99.32,
             },
             reporter: ["text", "lcov", "json", "json-summary", "text-summary"],
             include: ["packages/*/src/**/*.ts"],
