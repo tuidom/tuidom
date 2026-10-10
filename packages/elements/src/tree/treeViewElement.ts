@@ -1,5 +1,6 @@
 import { DisplayLine } from "@tuidom/core/common/displayLine";
 import { Point } from "@tuidom/core/common/geometryPromitives";
+import { StyleFlags } from "@tuidom/core/common/styleFlags";
 import type { TUIEventBase } from "@tuidom/core/dom/events/tuiEventBase";
 import type { TUIKeyboardEvent } from "@tuidom/core/dom/events/tuiKeyboardEvent";
 import type { TUIContextMenuEvent, TUIMouseEvent } from "@tuidom/core/dom/events/tuiMouseEvent";
@@ -16,6 +17,24 @@ const TYPEAHEAD_TIMEOUT_MS = 800;
 const ICON_EXPANDED = "\uF107"; //  nf-fa-angle_down — chevron, как в nvim-tree/NvChad
 const ICON_COLLAPSED = "\uF105"; //  nf-fa-angle_right
 const SYMLINK_BADGE = "\u21B5"; // enter-like arrow marking a symlink, pinned to the right edge
+
+const SEGMENT_SEPARATOR = "/";
+
+/** Текущий сегмент компактной строки; `signature` — сегменты, для которых он выбран. */
+interface SegmentState {
+    readonly index: number;
+    readonly signature: string;
+}
+
+/** Сегменты компактной строки ({@link ITreeItem.labelSegments}), либо null у обычной. */
+function compactSegments(item: ITreeItem): readonly string[] | null {
+    return item.labelSegments !== undefined && item.labelSegments.length > 1 ? item.labelSegments : null;
+}
+
+/** Текст метки строки: у компактной — сегменты через «/». */
+function rowLabel(item: ITreeItem): string {
+    return compactSegments(item)?.join(SEGMENT_SEPARATOR) ?? item.label;
+}
 
 interface FlatTreeNode<T> {
     element: T;
@@ -48,6 +67,15 @@ export class TreeViewElement<T> extends ScrollableElement {
      * заливает строку от края, а текст начинается со сдвигом.
      */
     private leftPadding: number;
+    /**
+     * Текущие сегменты компактных строк по ключу. Строки без записи стоят на
+     * последнем сегменте. Поколенческий, как {@link labelWidths}: строка, которую
+     * пересборка не встретила (свёрнут предок), теряет выбор — как у эталона,
+     * где контроллер сегментов живёт, пока строка отрисована.
+     */
+    private segmentStates = new Map<string, SegmentState>();
+    /** Сегмент под мышью на {@link hoveredIndex} (подчёркивается, как `:hover` у эталона). */
+    private hoveredSegment: number | null = null;
     private typeaheadBuffer = "";
     private typeaheadTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -55,6 +83,8 @@ export class TreeViewElement<T> extends ScrollableElement {
     public onActivate: ((item: T) => void) | null = null;
     public onExpandedChanged: ((element: T, expanded: boolean) => void) | null = null;
     public onContextMenu: ((element: T, screenX: number, screenY: number) => void) | null = null;
+    /** Сменился текущий сегмент компактной строки (Left/Right, клик, API). */
+    public onSegmentChanged: ((element: T, index: number) => void) | null = null;
 
     public constructor(provider: ITreeDataProvider<T>, options?: { leftPadding?: number }) {
         super();
@@ -191,7 +221,14 @@ export class TreeViewElement<T> extends ScrollableElement {
      */
     public getSelectedRowGlobalPosition(): Point | null {
         if (this.selectedIndex < 0 || this.selectedIndex >= this.flatNodes.length) return null;
-        const indentX = this.rowIndentX(this.flatNodes[this.selectedIndex].depth);
+        const node = this.flatNodes[this.selectedIndex];
+        const segments = compactSegments(node.item);
+        // Компактная строка: якорь у текущего сегмента (эталон ставит меню у его метки).
+        const indentX =
+            segments === null
+                ? this.rowIndentX(node.depth)
+                : this.segmentSpans(node, segments)[this.currentSegment(this.provider.getKey(node.element), segments)]
+                      .start;
         return new Point(
             this.globalPosition.x + indentX - this.scrollLeft,
             this.globalPosition.y + (this.selectedIndex - this.scrollTop),
@@ -214,6 +251,43 @@ export class TreeViewElement<T> extends ScrollableElement {
             }
         }
         return result;
+    }
+
+    /**
+     * Текущий сегмент компактной строки элемента ({@link ITreeItem.labelSegments}):
+     * по умолчанию последний. У обычной строки — 0.
+     */
+    public getSegmentIndex(element: T): number {
+        const segments = compactSegments(this.provider.getTreeItem(element));
+        if (segments === null) return 0;
+        return this.currentSegment(this.provider.getKey(element), segments);
+    }
+
+    /** Делает сегмент `index` компактной строки элемента текущим. Вне диапазона — no-op. */
+    public setSegmentIndex(element: T, index: number): void {
+        const segments = compactSegments(this.provider.getTreeItem(element));
+        if (segments === null || index < 0 || index >= segments.length) return;
+        this.applySegment(element, segments, index);
+    }
+
+    /** Предыдущий сегмент строки курсора. `false` — строка не компактная или курсор уже на первом. */
+    public focusPreviousSegment(): boolean {
+        return this.moveCursorSegment((current) => current - 1);
+    }
+
+    /** Следующий сегмент строки курсора. `false` — строка не компактная или курсор уже на последнем. */
+    public focusNextSegment(): boolean {
+        return this.moveCursorSegment((current) => current + 1);
+    }
+
+    /** Первый сегмент строки курсора. `false` — строка не компактная или курсор уже на нём. */
+    public focusFirstSegment(): boolean {
+        return this.moveCursorSegment(() => 0);
+    }
+
+    /** Последний сегмент строки курсора. `false` — строка не компактная или курсор уже на нём. */
+    public focusLastSegment(): boolean {
+        return this.moveCursorSegment((_, last) => last);
     }
 
     protected override performDefaultAction(event: TUIEventBase): void {
@@ -269,6 +343,10 @@ export class TreeViewElement<T> extends ScrollableElement {
 
             const rowText = this.formatRow(node);
             const rowIcon = node.item.icon;
+            // Подчёркнутые колонки компактной строки: текущий сегмент на строке
+            // курсора и сегмент под мышью (эталон: `.label-name.active` у
+            // focused-строки и `.label-name:hover` — `text-decoration: underline`).
+            const underlined = this.underlinedSpans(node, nodeKey, isCursor, isHovered);
             // Данные могут отдавать имена токенов (gitDecoration.*) — резолвим
             // в контексте дерева: раскраска переживает смену темы без пере-пуша.
             const rowIconColor = node.item.iconColor !== undefined ? this.resolveColor(node.item.iconColor) : undefined;
@@ -320,12 +398,16 @@ export class TreeViewElement<T> extends ScrollableElement {
                     fg = this.styleVar("list.deemphasizedForeground");
                 }
 
+                const style = underlined.some((span) => col >= span.start && col < span.end)
+                    ? StyleFlags.Underline
+                    : StyleFlags.None;
+
                 if (w === 2 && screenX + 1 >= viewportWidth) {
                     context.setCell(screenX, screenY, { char: " ", fg, bg: rowBg, width: 1 });
                     col++;
                     screenX++;
                 } else {
-                    context.setCell(screenX, screenY, { char, fg, bg: rowBg, width: w });
+                    context.setCell(screenX, screenY, { char, fg, bg: rowBg, width: w, style });
                     col += w;
                     screenX += w;
                 }
@@ -442,6 +524,15 @@ export class TreeViewElement<T> extends ScrollableElement {
         const labelWidths = new Map<string, number>();
         this.appendChildren(rootChildren, 0, null, previousWidths, labelWidths);
         this.labelWidths = labelWidths;
+
+        const previousSegments = this.segmentStates;
+        this.segmentStates = new Map();
+        for (const node of this.flatNodes) {
+            if (compactSegments(node.item) === null) continue;
+            const key = this.provider.getKey(node.element);
+            const state = previousSegments.get(key);
+            if (state !== undefined) this.segmentStates.set(key, state);
+        }
     }
 
     private appendChildren(
@@ -456,10 +547,11 @@ export class TreeViewElement<T> extends ScrollableElement {
             const item = this.provider.getTreeItem(element);
             this.flatNodes.push({ element, depth, item, parentKey });
 
-            let labelWidth = labelWidths.get(item.label);
+            const label = rowLabel(item);
+            let labelWidth = labelWidths.get(label);
             if (labelWidth === undefined) {
-                labelWidth = previousWidths.get(item.label) ?? new DisplayLine(item.label).displayWidth;
-                labelWidths.set(item.label, labelWidth);
+                labelWidth = previousWidths.get(label) ?? new DisplayLine(label).displayWidth;
+                labelWidths.set(label, labelWidth);
             }
             // indent + expandIcon + space + icon + space + label
             const rowWidth = this.rowIndentX(depth) + 2 + (item.icon ? 2 : 0) + labelWidth;
@@ -491,7 +583,76 @@ export class TreeViewElement<T> extends ScrollableElement {
                 : ICON_COLLAPSED
             : " ";
         const icon = node.item.icon ? node.item.icon + " " : "";
-        return `${indent}${expandIcon} ${icon}${node.item.label}`;
+        return `${indent}${expandIcon} ${icon}${rowLabel(node.item)}`;
+    }
+
+    // ─── Private: сегменты компактной строки ───
+
+    /** Колонка (в координатах контента), с которой начинается метка строки. */
+    private labelStartX(node: FlatTreeNode<T>): number {
+        return this.rowIndentX(node.depth) + 2 + (node.item.icon ? 2 : 0);
+    }
+
+    /** Колонки сегментов компактной строки `[start, end)` в координатах контента. */
+    private segmentSpans(node: FlatTreeNode<T>, segments: readonly string[]): { start: number; end: number }[] {
+        const spans: { start: number; end: number }[] = [];
+        let start = this.labelStartX(node);
+        for (const segment of segments) {
+            const end = start + new DisplayLine(segment).displayWidth;
+            spans.push({ start, end });
+            start = end + SEGMENT_SEPARATOR.length;
+        }
+        return spans;
+    }
+
+    /** Сегмент компактной строки под колонкой контента `col`, либо null (разделитель, иконка, хвост). */
+    private segmentAtColumn(node: FlatTreeNode<T>, col: number): number | null {
+        const segments = compactSegments(node.item);
+        if (segments === null) return null;
+        const index = this.segmentSpans(node, segments).findIndex((span) => col >= span.start && col < span.end);
+        return index >= 0 ? index : null;
+    }
+
+    private currentSegment(key: string, segments: readonly string[]): number {
+        const state = this.segmentStates.get(key);
+        // Цепочка строки изменилась (удлинилась, порвалась) — выбор сбрасывается
+        // на последний сегмент, как при перерисовке строки у эталона.
+        return state?.signature === segments.join("\0") ? state.index : segments.length - 1;
+    }
+
+    private applySegment(element: T, segments: readonly string[], index: number): void {
+        const key = this.provider.getKey(element);
+        if (this.currentSegment(key, segments) === index) return;
+        this.segmentStates.set(key, { index, signature: segments.join("\0") });
+        this.onSegmentChanged?.(element, index);
+        this.markDirty();
+    }
+
+    private moveCursorSegment(target: (current: number, last: number) => number): boolean {
+        const node = this.flatNodes.at(this.selectedIndex);
+        if (node === undefined) return false;
+        const segments = compactSegments(node.item);
+        if (segments === null) return false;
+        const current = this.currentSegment(this.provider.getKey(node.element), segments);
+        const next = target(current, segments.length - 1);
+        if (next === current || next < 0 || next >= segments.length) return false;
+        this.applySegment(node.element, segments, next);
+        return true;
+    }
+
+    private underlinedSpans(
+        node: FlatTreeNode<T>,
+        key: string,
+        isCursor: boolean,
+        isHovered: boolean,
+    ): { start: number; end: number }[] {
+        const segments = compactSegments(node.item);
+        if (segments === null || !(isCursor || isHovered)) return [];
+        const spans = this.segmentSpans(node, segments);
+        const result: { start: number; end: number }[] = [];
+        if (isCursor) result.push(spans[this.currentSegment(key, segments)]);
+        if (isHovered && this.hoveredSegment !== null) result.push(spans[this.hoveredSegment]);
+        return result;
     }
 
     // ─── Private: selection ───
@@ -628,10 +789,11 @@ export class TreeViewElement<T> extends ScrollableElement {
                 }
                 break;
             case "ArrowRight":
-                void this.handleExpandOrMoveToChild();
+                // Компактная строка: сначала сегменты, на последнем — обычное дерево.
+                if (!this.focusNextSegment()) void this.handleExpandOrMoveToChild();
                 break;
             case "ArrowLeft":
-                void this.handleCollapseOrMoveToParent();
+                if (!this.focusPreviousSegment()) void this.handleCollapseOrMoveToParent();
                 break;
             case "Enter":
                 this.activateSelected();
@@ -766,6 +928,14 @@ export class TreeViewElement<T> extends ScrollableElement {
                 this.selectedIndex = index;
                 this.applyCursor(index);
             }
+            // Как у эталона: правый клик по сегменту делает его текущим, мимо
+            // сегментов — меню про последнюю папку цепочки.
+            const node = this.flatNodes[index];
+            const segments = compactSegments(node.item);
+            if (segments !== null) {
+                const segment = this.segmentAtColumn(node, this.scrollLeft + event.localX);
+                this.applySegment(node.element, segments, segment ?? segments.length - 1);
+            }
             this.onContextMenu?.(this.flatNodes[index].element, event.screenX, event.screenY);
             return;
         }
@@ -798,6 +968,8 @@ export class TreeViewElement<T> extends ScrollableElement {
         const node = this.flatNodes[index];
         const expandIconX = this.rowIndentX(node.depth);
         const clickX = this.scrollLeft + event.localX;
+        const segment = this.segmentAtColumn(node, clickX);
+        if (segment !== null) this.setSegmentIndex(node.element, segment);
         if (node.item.collapsible && clickX >= expandIconX && clickX <= expandIconX + 1) {
             void this.toggleExpand(node.element);
         }
@@ -818,8 +990,13 @@ export class TreeViewElement<T> extends ScrollableElement {
     private handleMouseMove(event: TUIMouseEvent): void {
         const index = this.scrollTop + event.localY;
         const newHovered = index >= 0 && index < this.flatNodes.length ? index : null;
-        if (newHovered !== this.hoveredIndex) {
+        const newSegment =
+            newHovered === null
+                ? null
+                : this.segmentAtColumn(this.flatNodes[newHovered], this.scrollLeft + event.localX);
+        if (newHovered !== this.hoveredIndex || newSegment !== this.hoveredSegment) {
             this.hoveredIndex = newHovered;
+            this.hoveredSegment = newSegment;
             this.markDirty();
         }
     }
@@ -827,6 +1004,7 @@ export class TreeViewElement<T> extends ScrollableElement {
     private handleMouseLeave(): void {
         if (this.hoveredIndex !== null) {
             this.hoveredIndex = null;
+            this.hoveredSegment = null;
             this.markDirty();
         }
     }
