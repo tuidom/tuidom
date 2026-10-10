@@ -1,3 +1,4 @@
+import { NO_HOST_COLORS } from "@tuidom/core/backend/iTerminalBackend";
 import { packRgb } from "@tuidom/core/common/colorUtils";
 import { Point, Size } from "@tuidom/core/common/geometryPromitives";
 import { StyleFlags } from "@tuidom/core/common/styleFlags";
@@ -174,5 +175,17 @@ describe("HeadlessCaptureBackend", () => {
         const onResult = vi.fn();
         backend.probeTerminalVersion(onResult);
         expect(onResult).toHaveBeenCalledExactlyOnceWith(undefined);
+    });
+
+    it("probeHostColors сразу отвечает «ничего не сообщено», пока хост не задал hostColors", () => {
+        const backend = new HeadlessCaptureBackend();
+        const onResult = vi.fn();
+        backend.probeHostColors(onResult);
+        expect(onResult).toHaveBeenCalledExactlyOnceWith(NO_HOST_COLORS);
+
+        const colors = { foreground: 0xcccccc, background: 0x1e1e1e, ansi: NO_HOST_COLORS.ansi };
+        backend.hostColors = colors;
+        backend.probeHostColors(onResult);
+        expect(onResult).toHaveBeenLastCalledWith(colors);
     });
 });

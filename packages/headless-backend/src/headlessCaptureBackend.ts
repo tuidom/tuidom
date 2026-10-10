@@ -1,4 +1,4 @@
-import type { ITerminalBackend } from "@tuidom/core/backend/iTerminalBackend";
+import { type HostTerminalColors, type ITerminalBackend, NO_HOST_COLORS } from "@tuidom/core/backend/iTerminalBackend";
 import { Point, Size } from "@tuidom/core/common/geometryPromitives";
 import type { KeyPressEvent } from "@tuidom/core/input/keyEvent";
 import { KeyInputParser } from "@tuidom/core/input/keyInputParser";
@@ -76,6 +76,18 @@ export class HeadlessCaptureBackend implements ITerminalBackend {
      */
     public probeTerminalVersion(onResult: (nameAndVersion: string | undefined) => void): void {
         onResult(undefined);
+    }
+
+    /**
+     * What {@link probeHostColors} reports — the colors of the terminal this capture
+     * pretends to be. Default: nothing reported (the app keeps its own palette); a host
+     * sets it before the app probes, e.g. for a screenshot of a "host colors" mode.
+     */
+    public hostColors: HostTerminalColors = NO_HOST_COLORS;
+
+    /** Answers right away with {@link hostColors} — there is no terminal round-trip. */
+    public probeHostColors(onResult: (colors: HostTerminalColors) => void): void {
+        onResult(this.hostColors);
     }
 
     public renderFrame(grid: Grid, cursorPosition: Point | null): void {

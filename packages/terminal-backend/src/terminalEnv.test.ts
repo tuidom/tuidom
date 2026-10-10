@@ -1,6 +1,21 @@
 import { describe, expect, it } from "vitest";
 
-import { isInsideTmux, isSsh } from "./terminalEnv.ts";
+import { isInsideGnuScreen, isInsideTmux, isSsh } from "./terminalEnv.ts";
+
+describe("TerminalEnv — isInsideGnuScreen", () => {
+    it("STY без tmux — GNU Screen", () => {
+        expect(isInsideGnuScreen({ STY: "1234.pts-0.host" })).toBe(true);
+    });
+
+    it("tmux внутри screen: ближайший мультиплексор — tmux", () => {
+        expect(isInsideGnuScreen({ STY: "1234.pts-0.host", TMUX: "/tmp/tmux-1000/default,1,0" })).toBe(false);
+    });
+
+    it("без STY или с пустым STY — не screen", () => {
+        expect(isInsideGnuScreen({})).toBe(false);
+        expect(isInsideGnuScreen({ STY: "" })).toBe(false);
+    });
+});
 
 describe("TerminalEnv — isInsideTmux", () => {
     it("returns true when TMUX is set and non-empty", () => {
