@@ -11,6 +11,14 @@ export interface ITreeItem {
     readonly badge?: string;
     /** Упакованный RGB-цвет имени: переопределяет fg спана метки (напр. git-статус). */
     readonly labelColor?: StyleColor;
+    /**
+     * Компактная строка (VS Code `explorer.compactFolders`): метка из нескольких
+     * сегментов, которые рисуются через «/» вместо {@link label}. У строки есть
+     * текущий сегмент (по умолчанию последний): он подчёркнут на строке курсора,
+     * Left/Right ходят по сегментам, клик по сегменту делает его текущим — см.
+     * {@link TreeViewElement.getSegmentIndex}. Меньше двух сегментов — обычная строка.
+     */
+    readonly labelSegments?: readonly string[];
 }
 
 export interface ITreeDataProvider<T> {
