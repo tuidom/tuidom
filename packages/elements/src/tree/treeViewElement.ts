@@ -85,11 +85,24 @@ export class TreeViewElement<T> extends ScrollableElement {
     public onContextMenu: ((element: T, screenX: number, screenY: number) => void) | null = null;
     /** Сменился текущий сегмент компактной строки (Left/Right, клик, API). */
     public onSegmentChanged: ((element: T, index: number) => void) | null = null;
+    /**
+     * Раскрывать узел только шевроном — `expandOnlyOnTwistieClick` дерева
+     * эталона. `true` (по умолчанию): клик по имени лишь выделяет, узел
+     * переключают шеврон и двойной клик, Enter не раскрывает. `false`: каждый
+     * клик по строке и Enter переключают узел; двойной клик — это два клика,
+     * отдельно он узел не трогает (как у эталона: раскрыл и свернул). Функция
+     * решает по узлу. Читается на каждом жесте — менять можно на лету.
+     */
+    public expandOnlyOnTwistieClick: boolean | ((element: T) => boolean);
 
-    public constructor(provider: ITreeDataProvider<T>, options?: { leftPadding?: number }) {
+    public constructor(
+        provider: ITreeDataProvider<T>,
+        options?: { leftPadding?: number; expandOnlyOnTwistieClick?: boolean | ((element: T) => boolean) },
+    ) {
         super();
         this.focusable = true;
         this.leftPadding = options?.leftPadding ?? 0;
+        this.expandOnlyOnTwistieClick = options?.expandOnlyOnTwistieClick ?? true;
         this.provider = provider;
         this.provider.onChange = (element) => {
             void this.refresh(element);
@@ -900,9 +913,24 @@ export class TreeViewElement<T> extends ScrollableElement {
         }
     }
 
+    /** Enter — `list.select` эталона: переключает узел (если не только шевроном) и открывает строку. */
     private activateSelected(): void {
         const node = this.flatNodes[this.selectedIndex];
+        if (this.expandsOnRowGesture(node)) void this.toggleExpand(node.element);
         this.onActivate?.(node.element);
+    }
+
+    /** Переключают ли узел клик по строке и Enter (см. {@link expandOnlyOnTwistieClick}). */
+    private expandsOnRowGesture(node: FlatTreeNode<T>): boolean {
+        if (!node.item.collapsible) return false;
+        const onlyTwistie = this.expandOnlyOnTwistieClick;
+        return !(typeof onlyTwistie === "function" ? onlyTwistie(node.element) : onlyTwistie);
+    }
+
+    /** Попал ли клик по колонке `clickX` в шеврон строки. */
+    private isOnTwistie(node: FlatTreeNode<T>, clickX: number): boolean {
+        const expandIconX = this.rowIndentX(node.depth);
+        return node.item.collapsible && clickX >= expandIconX && clickX <= expandIconX + 1;
     }
 
     private async toggleSelected(): Promise<void> {
@@ -964,27 +992,34 @@ export class TreeViewElement<T> extends ScrollableElement {
 
         this.setSelectedIndex(index);
 
-        // Check if clicked on expand icon area
         const node = this.flatNodes[index];
-        const expandIconX = this.rowIndentX(node.depth);
         const clickX = this.scrollLeft + event.localX;
+        // Компактная строка: клик по сегменту и делает его текущим, и
+        // переключает строку целиком — у эталона это одна строка дерева.
         const segment = this.segmentAtColumn(node, clickX);
         if (segment !== null) this.setSegmentIndex(node.element, segment);
-        if (node.item.collapsible && clickX >= expandIconX && clickX <= expandIconX + 1) {
+        if (this.isOnTwistie(node, clickX) || this.expandsOnRowGesture(node)) {
             void this.toggleExpand(node.element);
         }
     }
 
+    /**
+     * Движок шлёт dblclick после второго click. Каждый клик уже переключил
+     * узел, если строка раскрывается кликом или клик пришёлся в шеврон, —
+     * тогда dblclick узел не трогает (у эталона двойной клик по папке так же
+     * раскрывает и сворачивает её). Иначе переключает он.
+     */
     private handleDblClick(event: TUIMouseEvent): void {
         const index = this.scrollTop + event.localY;
         if (index < 0 || index >= this.flatNodes.length) return;
 
         const node = this.flatNodes[index];
-        if (node.item.collapsible) {
-            void this.toggleExpand(node.element);
-        } else {
+        if (!node.item.collapsible) {
             this.onActivate?.(node.element);
+            return;
         }
+        if (this.isOnTwistie(node, this.scrollLeft + event.localX) || this.expandsOnRowGesture(node)) return;
+        void this.toggleExpand(node.element);
     }
 
     private handleMouseMove(event: TUIMouseEvent): void {
