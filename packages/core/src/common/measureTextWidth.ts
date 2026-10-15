@@ -1,6 +1,5 @@
+import { segmentGraphemes } from "./segmentGraphemes.ts";
 import { getCharDisplayWidth, getGraphemeDisplayWidth } from "./unicodeWidth.ts";
-
-const segmenter = new Intl.Segmenter("en", { granularity: "grapheme" });
 
 const DEFAULT_TAB_SIZE = 4;
 
@@ -27,7 +26,7 @@ const DEFAULT_TAB_SIZE = 4;
 export function measureTextWidth(raw: string, tabSize: number = DEFAULT_TAB_SIZE, stopAfter = Infinity): number {
     let column = 0;
 
-    for (const { segment, index } of segmenter.segment(raw)) {
+    for (const { segment, index } of segmentGraphemes(raw)) {
         if (index >= stopAfter) break;
 
         if (segment === "\t") {

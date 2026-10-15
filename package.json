@@ -34,13 +34,15 @@
         "demo:renderer": "tsx demos/rendererDemo.ts",
         "demo:mouse": "tsx demos/mouseDemo.ts",
         "demo:layout": "tsx demos/layoutDemo.ts",
-        "demo:key-parser": "tsx demos/keyInputParserDemo.ts"
+        "demo:key-parser": "tsx demos/keyInputParserDemo.ts",
+        "check:snapshot": "node scripts/snapshot-check.mjs"
     },
     "devDependencies": {
         "@eslint/js": "^10.0.1",
         "@types/node": "^25.5.2",
         "@types/ws": "^8.18.1",
         "@vitest/coverage-v8": "^4.0.18",
+        "esbuild": "^0.28.2",
         "eslint": "^10.0.3",
         "eslint-config-prettier": "^10.1.8",
         "eslint-plugin-prettier": "^5.5.5",

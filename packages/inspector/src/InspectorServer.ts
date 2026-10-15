@@ -1,4 +1,4 @@
-import { createServer, type IncomingMessage, type Server } from "node:http";
+import type { IncomingMessage, Server } from "node:http";
 import type { Socket } from "node:net";
 
 import type { InspectorCore } from "./InspectorCore.ts";
@@ -23,6 +23,13 @@ export interface InspectorServerOptions {
  * WebSocket transport for the inspector: a hand-written RFC6455 server over
  * node:http (zero runtime deps). Routes each inbound JSON message to
  * `InspectorCore.dispatch` and writes back the response frame.
+ *
+ * `node:http` is loaded when the server is constructed, not imported at module
+ * level: the import alone creates a native `HTTPParser` (which a V8 startup
+ * snapshot cannot serialize) and wakes undici (~9 ms), while a host bundles the
+ * inspector unconditionally and attaches it only on demand.
+ * `process.getBuiltinModule` is synchronous and, unlike a namespace stub,
+ * survives bundlers that enumerate the module's exports.
  */
 export class InspectorServer {
     private readonly core: InspectorCore;
@@ -31,6 +38,7 @@ export class InspectorServer {
 
     public constructor(core: InspectorCore) {
         this.core = core;
+        const { createServer } = process.getBuiltinModule("node:http");
         this.httpServer = createServer((_req, res) => {
             res.writeHead(426); // Upgrade Required — this endpoint is WebSocket only
             res.end("WebSocket only");
