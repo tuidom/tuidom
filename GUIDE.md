@@ -355,6 +355,12 @@ option of `renderElement`.
 contract, child-inside-parent). In a real app the same check is opt-in via
 `app.validateTreeAfterRender = true`.
 
+To profile frames, set `app.onFrameTimings = (t) => …`: after every frame it
+receives the frame number, its start (`performance.now()`) and the time spent
+in each phase — `layout`, `style`, `damage`, `paint` and `flush` (diff plus
+the write to the terminal), in ms. While it is `null` a frame doesn't read the
+clock at all.
+
 ## Elements overview
 
 A one-line map of `@tuidom/elements` (import paths follow the source layout,
