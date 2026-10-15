@@ -18,5 +18,7 @@ jobs:
       - run: npm run typecheck
       - run: npm run lint
       - run: npm run test:coverage
+      # Граф пакетов собирается в V8-снапшот: на уровне модулей нет нативных объектов.
+      - run: npm run check:snapshot
       # Топологическая сборка пакетов + npm pack + smoke шести tgz на голом node (deep-exports).
       - run: npm run pack

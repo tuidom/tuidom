@@ -1,6 +1,5 @@
+import { segmentGraphemes } from "./segmentGraphemes.ts";
 import { getCharDisplayWidth, getGraphemeDisplayWidth } from "./unicodeWidth.ts";
-
-const segmenter = new Intl.Segmenter("en", { granularity: "grapheme" });
 
 /**
  * A single visual unit in a display line — one grapheme cluster with its
@@ -55,7 +54,7 @@ export class DisplayLine {
         let scannedLength = raw.length;
         let truncated = false;
 
-        for (const { segment, index } of segmenter.segment(raw)) {
+        for (const { segment, index } of segmentGraphemes(raw)) {
             if (index >= stopAfter) {
                 truncated = true;
                 scannedLength = index;
