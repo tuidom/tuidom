@@ -13,7 +13,9 @@ import { TextLabelElement } from "./textLabelElement.ts";
 
 describe("TextLabelElement — стоимость сегментации текста", () => {
     it("текст сегментируется один раз на setText, а не на каждом кадре", () => {
-        const longText = "const needle = 42; " + "x".repeat(10_000);
+        // Комбинирующий знак первым: иначе фастпас segmentGraphemes режет строку
+        // без ICU и шпиону нечего считать.
+        const longText = "e\u0301 const needle = 42; " + "x".repeat(10_000);
         // Шпион — ДО создания приложения: initial render строит кэш.
         const spy = vi.spyOn(Intl.Segmenter.prototype, "segment");
         const countOurs = (): number => spy.mock.calls.filter((call) => call[0] === longText).length;
