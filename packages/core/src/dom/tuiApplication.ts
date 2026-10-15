@@ -14,6 +14,24 @@ import { ROOT_STYLE_CONTEXT } from "./styles/tuiStyle.ts";
 import { RenderContext, type TUIElement } from "./tuiElement.ts";
 import { assertValidTree } from "./validateTree.ts";
 
+/**
+ * Сколько занял кадр по фазам {@link TuiApplication.renderFrame}, мс. Для
+ * профилирования хостом (трасса старта, бенчи): кадр — layout → стили →
+ * damage-обход → отрисовка повреждённых областей → flush в бэкенд (diff +
+ * запись в терминал).
+ */
+export interface IFrameTimings {
+    /** Номер кадра — {@link TuiApplication.frameCount} после этого кадра. */
+    readonly frame: number;
+    /** Начало кадра, `performance.now()`. */
+    readonly start: number;
+    readonly layout: number;
+    readonly style: number;
+    readonly damage: number;
+    readonly paint: number;
+    readonly flush: number;
+}
+
 export class TuiApplication {
     public backend: ITerminalBackend;
 
@@ -29,6 +47,11 @@ export class TuiApplication {
      * кадре, а не молчаливым «не показывается / не кликается».
      */
     public validateTreeAfterRender = false;
+    /**
+     * Наблюдатель фаз кадра: зовётся после каждого кадра с таймингами
+     * {@link IFrameTimings}. Пока он null, кадр не читает часы вовсе.
+     */
+    public onFrameTimings: ((timings: IFrameTimings) => void) | null = null;
     // Монотонный счётчик отрисованных кадров. Инкремент на каждый renderFrame —
     // инспектор ждёт «рендер устоялся» (frameCount не менялся + нет
     // запланированного рендера), не завися от sleep. См. inspector/idleWaiter.
@@ -57,6 +80,8 @@ export class TuiApplication {
     private renderFrame(): void {
         if (this.root) {
             this.frameCounter++;
+            const observer = this.onFrameTimings;
+            const start = observer === null ? 0 : performance.now();
 
             // Root at (0, 0) — top-left of screen. globalPosition производный
             // (localPosition корня без родителя), выставлять его не нужно.
@@ -66,7 +91,9 @@ export class TuiApplication {
             // validateTree не зависят от damage); стили гейтятся внутри.
             const constraints = BoxConstraints.tight(this.screen.size);
             this.root.layout(constraints);
+            const layoutEnd = observer === null ? 0 : performance.now();
             this.root.performStyleResolution(ROOT_STYLE_CONTEXT);
+            const styleEnd = observer === null ? 0 : performance.now();
 
             // Damage-обход — всегда: и собирает области, и актуализирует
             // lastPaintedRect/флаги (даже когда кадр будет полным).
@@ -76,6 +103,7 @@ export class TuiApplication {
             }
             this.root.collectDamage(damage, new Point(0, 0));
 
+            const damageEnd = observer === null ? 0 : performance.now();
             const screenBounds = new Rect(new Point(0, 0), this.screen.size);
             let rects: readonly Rect[];
             if (this.needsFullRepaint) {
@@ -106,8 +134,22 @@ export class TuiApplication {
                 this.root.render(new RenderContext(this.screen, new Offset(0, 0), rect));
             }
 
+            const paintEnd = observer === null ? 0 : performance.now();
+
             // Всегда: пустой damage — пустой diff, ноль байт в терминал.
             this.screen.flush(this.backend);
+            if (observer !== null) {
+                const flushEnd = performance.now();
+                observer({
+                    frame: this.frameCounter,
+                    start,
+                    layout: layoutEnd - start,
+                    style: styleEnd - layoutEnd,
+                    damage: damageEnd - styleEnd,
+                    paint: paintEnd - damageEnd,
+                    flush: flushEnd - paintEnd,
+                });
+            }
             if (this.validateTreeAfterRender) {
                 assertValidTree(this.root);
             }
