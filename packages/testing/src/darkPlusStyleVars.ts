@@ -71,6 +71,7 @@ export const DARK_PLUS_STYLE_VARS: Readonly<Record<string, number>> = {
     "list.activeSelectionIconForeground": 0xffffff,
     "list.deemphasizedForeground": 0x808080,
     "list.dropBackground": 0x383b3d,
+    "list.errorForeground": 0xf88070,
     "list.highlightForeground": 0x64c8ff,
     "list.hoverBackground": 0x2a2d2e,
     "list.inactiveSelectionBackground": 0x37373d,

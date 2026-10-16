@@ -8,16 +8,16 @@ function tab(label: string, over: Partial<TabInfo> = {}): TabInfo {
 }
 
 describe("EditorTabStripElement.inspectState", () => {
-    it("reports tab labels with active/modified/readonly flags", () => {
+    it("reports tab labels with active/modified/readonly/deleted flags", () => {
         const strip = new EditorTabStripElement();
-        strip.setTabs([tab("a.ts", { isModified: true }), tab("b.log", { isReadOnly: true })]);
+        strip.setTabs([tab("a.ts", { isModified: true }), tab("b.log", { isReadOnly: true, isDeleted: true })]);
         strip.activeIndex = 1;
 
         expect(strip.inspectState()).toEqual({
             activeIndex: 1,
             tabs: [
-                { label: "a.ts", active: false, modified: true, readOnly: false },
-                { label: "b.log", active: true, modified: false, readOnly: true },
+                { label: "a.ts", active: false, modified: true, readOnly: false, deleted: false },
+                { label: "b.log", active: true, modified: false, readOnly: true, deleted: true },
             ],
         });
     });

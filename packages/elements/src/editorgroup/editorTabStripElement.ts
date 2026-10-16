@@ -4,7 +4,7 @@ import { TUIElement } from "@tuidom/core/dom/tuiElement";
 import { FillerElement } from "../layout/fillerElement.ts";
 import { HFlexElement, hflexFill, hflexFit } from "../layout/hFlexElement.ts";
 
-import { EditorTabItemElement } from "./editorTabItemElement.ts";
+import { DELETED_STATE, EditorTabItemElement } from "./editorTabItemElement.ts";
 
 // ─── Tab Info ───
 
@@ -15,6 +15,11 @@ export interface TabInfo {
     isModified: boolean;
     /** Read-only буфер — вкладка получает метку-замок. */
     isReadOnly: boolean;
+    /**
+     * Файл вкладки удалён с диска: имя зачёркнуто и окрашено
+     * `list.errorForeground` (как orphaned-вкладка VS Code).
+     */
+    isDeleted?: boolean;
 }
 
 // ─── EditorTabStripElement ───
@@ -54,7 +59,7 @@ export class EditorTabStripElement extends TUIElement {
         this.markDirty();
     }
 
-    /** Observable state: tab labels with active/modified/readonly flags. */
+    /** Observable state: tab labels with active/modified/readonly/deleted flags. */
     public override inspectState(): Record<string, unknown> {
         return {
             activeIndex: this.activeIndexValue,
@@ -63,6 +68,7 @@ export class EditorTabStripElement extends TUIElement {
                 active: i === this.activeIndexValue,
                 modified: item.getModified(),
                 readOnly: item.getReadOnly(),
+                deleted: item.getDeleted(),
             })),
         };
     }
@@ -84,18 +90,25 @@ export class EditorTabStripElement extends TUIElement {
                 item.setIcon(tab.icon, tab.iconColor);
                 item.setModified(tab.isModified);
                 item.setReadOnly(tab.isReadOnly);
+                item.setDeleted(tab.isDeleted ?? false);
             } else {
                 item = new EditorTabItemElement(tab.label, tab.icon, tab.iconColor, {
                     modified: tab.isModified,
                     readOnly: tab.isReadOnly,
+                    deleted: tab.isDeleted ?? false,
                     paddingLeft: 2,
                     paddingRight: 2,
                 });
                 // Вкладка декларирует оба вида токенами; активность — состояние.
+                // Удалённый файл красится поверх любой активности (запись позже —
+                // приоритет выше), как декорация VS Code.
                 item.style = {
                     fg: "tab.inactiveForeground",
                     bg: "tab.inactiveBackground",
-                    when: [{ states: ["active"], fg: "tab.activeForeground", bg: "tab.activeBackground" }],
+                    when: [
+                        { states: ["active"], fg: "tab.activeForeground", bg: "tab.activeBackground" },
+                        { states: [DELETED_STATE], fg: "list.errorForeground" },
+                    ],
                 };
                 const index = i;
                 item.onActivate = () => this.onTabActivate?.(index);
