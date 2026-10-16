@@ -156,13 +156,14 @@ describe("HeadlessCaptureBackend", () => {
         expect(onResize).toHaveBeenCalledWith(new Size(120, 40));
     });
 
-    it("setup/teardown/writeOscSequence/probeKeyboardProtocol are inert no-ops", () => {
+    it("setup/teardown/writeOscSequence/setWindowTitle/probeKeyboardProtocol are inert no-ops", () => {
         const backend = new HeadlessCaptureBackend();
         const probe = vi.fn();
         expect(() => {
             backend.setup();
             backend.teardown();
             backend.writeOscSequence("\x1b]52;c;abc\x07");
+            backend.setWindowTitle("app - Diode");
             backend.onOscResponse(() => undefined);
             backend.probeKeyboardProtocol(probe);
         }).not.toThrow();
