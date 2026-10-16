@@ -440,6 +440,56 @@ function parseCodepointParam(paramStr: string): {
 // ─── Code inference ───
 
 /**
+ * Физическая клавиша US-раскладки под буквой кириллической ЙЦУКЕН: русская целиком,
+ * плюс украинские і/ї/є/ґ и белорусская ў. Нужна легаси-вводу (tmux, терминалы без
+ * kitty-флага alternate keys): там приходит только символ, а мнемоники и Alt-кейбинды
+ * ищут клавишу по `code` — в браузере `code` тоже физический (`а` → `KeyF`).
+ *
+ * Белорусская `і` стоит на месте латинской B, украинская — на S; `і` одна, выбрана
+ * украинская позиция (на B у русской и украинской раскладок `и`).
+ */
+const cyrillicCodes: Partial<Record<string, string>> = {
+    й: "KeyQ",
+    ц: "KeyW",
+    у: "KeyE",
+    к: "KeyR",
+    е: "KeyT",
+    н: "KeyY",
+    г: "KeyU",
+    ш: "KeyI",
+    щ: "KeyO",
+    ў: "KeyO",
+    з: "KeyP",
+    х: "BracketLeft",
+    ъ: "BracketRight",
+    ї: "BracketRight",
+    ф: "KeyA",
+    ы: "KeyS",
+    і: "KeyS",
+    в: "KeyD",
+    а: "KeyF",
+    п: "KeyG",
+    р: "KeyH",
+    о: "KeyJ",
+    л: "KeyK",
+    д: "KeyL",
+    ж: "Semicolon",
+    э: "Quote",
+    є: "Quote",
+    я: "KeyZ",
+    ч: "KeyX",
+    с: "KeyC",
+    м: "KeyV",
+    и: "KeyB",
+    т: "KeyN",
+    ь: "KeyM",
+    б: "Comma",
+    ю: "Period",
+    ё: "Backquote",
+    ґ: "Backslash",
+};
+
+/**
  * Infer a DOM-style `code` from a key value.
  * Best-effort for traditional terminal mode (no physical key info available).
  */
@@ -447,6 +497,8 @@ export function inferCode(key: string): string {
     if (key.length === 1) {
         const upper = key.toUpperCase();
         if (upper >= "A" && upper <= "Z") return `Key${upper}`;
+        const cyrillic = cyrillicCodes[key.toLowerCase()];
+        if (cyrillic !== undefined) return cyrillic;
         if (key >= "0" && key <= "9") return `Digit${key}`;
         if (key === " ") return "Space";
 

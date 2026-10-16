@@ -265,6 +265,60 @@ describe("MenuBarElement", () => {
             backend.sendKey("Alt+e");
             expect(menuBar.activeIndex).toBe(1);
         });
+
+        it("Russian layout, legacy ESC prefix: Alt+а opens File (physical KeyF)", () => {
+            const { backend, menuBar } = setupWithBody(simpleItems());
+
+            backend.sendKey("Alt+а");
+            expect(menuBar.activeIndex).toBe(0);
+
+            backend.sendKey("Alt+М");
+            expect(menuBar.activeIndex).toBe(2);
+        });
+
+        it("Russian layout, kitty: key «у» with code KeyE opens Edit", () => {
+            const { menuBar, children } = setupWithBody(simpleItems());
+
+            children[0].focus();
+            children[0].dispatchEvent(new TUIKeyboardEvent("keydown", { key: "у", code: "KeyE", altKey: true }));
+            expect(menuBar.activeIndex).toBe(1);
+        });
+
+        it("explicit mnemonic is matched by physical key too", () => {
+            const items: MenuBarItem[] = [
+                { label: "File", mnemonic: "f", entries: [] },
+                { label: "Edit", mnemonic: "x", entries: [] },
+            ];
+            const { backend, menuBar } = setupWithBody(items);
+
+            backend.sendKey("Alt+ч");
+            expect(menuBar.activeIndex).toBe(1);
+        });
+
+        it("a Latin key decides by itself — its code is not consulted (AZERTY Alt+a on KeyQ)", () => {
+            const items: MenuBarItem[] = [{ label: "Quit", entries: [] }];
+            const { menuBar, children } = setupWithBody(items);
+
+            children[0].focus();
+            children[0].dispatchEvent(new TUIKeyboardEvent("keydown", { key: "a", code: "KeyQ", altKey: true }));
+            expect(menuBar.activeIndex).toBe(-1);
+        });
+
+        it("non-Latin key whose physical key has no mnemonic opens nothing", () => {
+            const { backend, menuBar } = setupWithBody(simpleItems());
+
+            backend.sendKey("Alt+й");
+            expect(menuBar.activeIndex).toBe(-1);
+        });
+
+        it("non-letter mnemonic is not matched by code", () => {
+            const items: MenuBarItem[] = [{ label: "1 Recent", mnemonic: "1", entries: [] }];
+            const { menuBar, children } = setupWithBody(items);
+
+            children[0].focus();
+            children[0].dispatchEvent(new TUIKeyboardEvent("keydown", { key: "ё", code: "Key1", altKey: true }));
+            expect(menuBar.activeIndex).toBe(-1);
+        });
     });
 
     describe("keyboard navigation", () => {
