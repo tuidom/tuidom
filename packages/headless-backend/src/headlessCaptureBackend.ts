@@ -106,6 +106,11 @@ export class HeadlessCaptureBackend implements ITerminalBackend {
         // No terminal to restore.
     }
 
+    /** The window title has no window to go to in headless mode. */
+    public setWindowTitle(_title: string): void {
+        // No-op: no terminal window to title.
+    }
+
     /** OSC output (e.g. clipboard writes) has nowhere to go in headless mode. */
     public writeOscSequence(_sequence: string): void {
         // No-op: no terminal to receive the sequence.

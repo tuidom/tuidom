@@ -47,6 +47,21 @@ const BRACKETED_PASTE_ENABLE = "\x1b[?2004h";
 const BRACKETED_PASTE_DISABLE = "\x1b[?2004l";
 
 /**
+ * Window-title stack (XTWINOPS): `CSI 22 ; 0 t` saves the icon and window titles,
+ * `CSI 23 ; 0 t` restores them — the same push/pop vim does around its own title, so the
+ * shell's title comes back on exit. tmux keeps the stack per pane; terminals without it
+ * ignore the sequence.
+ */
+const TITLE_PUSH = "\x1b[22;0t";
+const TITLE_POP = "\x1b[23;0t";
+
+/** OSC 0 — icon name and window title at once; BEL is the terminator everyone understands. */
+export function windowTitleSequence(title: string): string {
+    // A control character inside the title would cut the sequence short.
+    return `\x1b]0;${title.replace(/[\x00-\x1f\x7f]/g, " ")}\x07`;
+}
+
+/**
  * Keyboard-protocol probe: query current Kitty flags (`CSI ? u`) immediately followed by
  * Primary Device Attributes (`CSI c`). Only Kitty-capable terminals answer the first; every
  * terminal answers DA1, so the DA1 reply is the "all replies are in" sentinel. The timeout
@@ -156,6 +171,8 @@ export class NodeTerminalBackend implements ITerminalBackend {
     private lastEmittedSize: Size | null = null;
     private resizePending = false;
     private cleanupHandlers: (() => void)[] = [];
+    /** The title stack got a push from {@link setWindowTitle}; teardown owes it a pop. */
+    private titlePushed = false;
     private readonly isTmux: boolean;
     private readonly isGnuScreen: boolean;
     private readonly inputParser = new KeyInputParser();
@@ -212,6 +229,21 @@ export class NodeTerminalBackend implements ITerminalBackend {
      */
     public writeOscSequence(sequence: string): void {
         this.writePassthrough(sequence);
+    }
+
+    /**
+     * Set the terminal window title (OSC 0). Written directly, never through tmux
+     * passthrough: tmux understands OSC 0/2 itself and keeps it as the pane title
+     * (`#{pane_title}`, `#T`), from where `set-titles` / `automatic-rename-format` carry it
+     * to the outer window and the tmux window name. The first call saves the current title
+     * on the terminal's title stack; {@link teardown} restores it.
+     */
+    public setWindowTitle(title: string): void {
+        if (!this.titlePushed) {
+            this.writeDirect(TITLE_PUSH);
+            this.titlePushed = true;
+        }
+        this.writeDirect(windowTitleSequence(title));
     }
 
     public onInput(callback: (event: KeyPressEvent) => void): void {
@@ -514,6 +546,11 @@ export class NodeTerminalBackend implements ITerminalBackend {
         this.stdout.write("\x1b[?25h");
         // Restore normal screen buffer
         this.stdout.write("\x1b[?1049l");
+        // Restore the title saved by the first setWindowTitle — direct, like the title itself
+        if (this.titlePushed) {
+            this.writeDirect(TITLE_POP);
+            this.titlePushed = false;
+        }
 
         // Remove stdin listener
         if (this.onDataHandler) {
