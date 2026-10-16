@@ -1,5 +1,6 @@
 import { packRgb } from "@tuidom/core/common/colorUtils";
 import { Point } from "@tuidom/core/common/geometryPromitives";
+import { DARK_PLUS_STYLE_VARS } from "@tuidom/testing/darkPlusStyleVars";
 import type { MockTerminalBackend } from "@tuidom/testing/mockTerminalBackend";
 import { renderElement } from "@tuidom/testing/renderElement";
 import { describe, expect, it, vi } from "vitest";
@@ -83,6 +84,43 @@ describe("EditorTabStripElement", () => {
             const items = strip.getItemElements();
             expect(items[0].hasStyleState("active")).toBe(false);
             expect(items[1].hasStyleState("active")).toBe(true);
+        });
+    });
+
+    describe("удалённый файл", () => {
+        const ERROR_FG = DARK_PLUS_STYLE_VARS["list.errorForeground"];
+
+        it("имя удалённого файла — list.errorForeground и у активной, и у неактивной вкладки", () => {
+            const strip = new EditorTabStripElement();
+            const tabs = makeTabs("a.ts", "b.ts", "c.ts");
+            tabs[0].isDeleted = true;
+            tabs[1].isDeleted = true;
+            strip.setTabs(tabs);
+            strip.activeIndex = 0;
+
+            const backend = renderElement(strip, 60, 1, { themeVars: true });
+            const items = strip.getItemElements();
+            // Колонка имени: [2 pad][icon][space] → имя с 4-й колонки вкладки.
+            const labelX = (i: number): number => items[i].globalPosition.x + 4;
+            expect(backend.getFgAt(new Point(labelX(0), 0))).toBe(ERROR_FG);
+            expect(backend.getFgAt(new Point(labelX(1), 0))).toBe(ERROR_FG);
+            expect(backend.getFgAt(new Point(labelX(2), 0))).toBe(DARK_PLUS_STYLE_VARS["tab.inactiveForeground"]);
+        });
+
+        it("флаг доезжает до переиспользованной вкладки и снимается", () => {
+            const strip = new EditorTabStripElement();
+            strip.setTabs(makeTabs("a.ts"));
+            const item = strip.getItemElements()[0];
+            expect(item.getDeleted()).toBe(false);
+
+            const deleted = makeTabs("a.ts");
+            deleted[0].isDeleted = true;
+            strip.setTabs(deleted);
+            expect(strip.getItemElements()[0]).toBe(item);
+            expect(item.getDeleted()).toBe(true);
+
+            strip.setTabs(makeTabs("a.ts"));
+            expect(item.getDeleted()).toBe(false);
         });
     });
 

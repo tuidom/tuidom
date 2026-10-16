@@ -10,12 +10,16 @@ const MODIFIED_CHAR = "●";
 // копирование через инструменты и тихо превращается в пустую строку.
 const READONLY_CHAR = "\uea75"; // nf-cod-lock
 
+/** Стилевое состояние вкладки удалённого файла (см. {@link EditorTabItemElement.setDeleted}). */
+export const DELETED_STATE = "deleted";
+
 export class EditorTabItemElement extends TUIElement {
     private label: string;
     private icon: string;
     private iconColor: number;
     private modified: boolean;
     private readOnly: boolean;
+    private deleted: boolean;
     private paddingLeft: number;
     private paddingRight: number;
     private hovered = false;
@@ -29,7 +33,13 @@ export class EditorTabItemElement extends TUIElement {
         label: string,
         icon: string,
         iconColor: number,
-        options?: { modified?: boolean; readOnly?: boolean; paddingLeft?: number; paddingRight?: number },
+        options?: {
+            modified?: boolean;
+            readOnly?: boolean;
+            deleted?: boolean;
+            paddingLeft?: number;
+            paddingRight?: number;
+        },
     ) {
         super();
         this.label = label;
@@ -37,6 +47,8 @@ export class EditorTabItemElement extends TUIElement {
         this.iconColor = iconColor;
         this.modified = options?.modified ?? false;
         this.readOnly = options?.readOnly ?? false;
+        this.deleted = options?.deleted ?? false;
+        this.setStyleState(DELETED_STATE, this.deleted);
         this.paddingLeft = options?.paddingLeft ?? 1;
         this.paddingRight = options?.paddingRight ?? 1;
 
@@ -117,6 +129,23 @@ export class EditorTabItemElement extends TUIElement {
     public setReadOnly(readOnly: boolean): void {
         if (this.readOnly === readOnly) return;
         this.readOnly = readOnly;
+        this.markDirty();
+    }
+
+    public getDeleted(): boolean {
+        return this.deleted;
+    }
+
+    /**
+     * Файл вкладки удалён (orphaned-модель VS Code): имя зачёркнуто, а на
+     * элементе стоит стилевое состояние {@link DELETED_STATE} — цвет по нему
+     * объявляет владелец (`when` в `style`), как VS Code красит удалённый файл
+     * декорацией `list.errorForeground`.
+     */
+    public setDeleted(deleted: boolean): void {
+        if (this.deleted === deleted) return;
+        this.deleted = deleted;
+        this.setStyleState(DELETED_STATE, deleted);
         this.markDirty();
     }
 
@@ -214,9 +243,10 @@ export class EditorTabItemElement extends TUIElement {
             }
         }
 
-        // Label
+        // Label — struck through when the file is gone (VS Code strikethrough decoration).
+        const labelStyle = this.deleted ? StyleFlags.Strikethrough : StyleFlags.None;
         for (let i = 0; i < this.label.length && x < width; i++) {
-            context.setCell(x, 0, { char: this.label[i], fg: resolved.fg, bg: resolved.bg });
+            context.setCell(x, 0, { char: this.label[i], fg: resolved.fg, bg: resolved.bg, style: labelStyle });
             x += 1;
         }
 
