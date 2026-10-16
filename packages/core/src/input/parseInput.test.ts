@@ -291,13 +291,13 @@ describe("parseInput", () => {
     it("parses Kitty CSI u: Shift+а cyrillic (\\x1b[1072;2u) → key='А'", () => {
         // U+0430 'а' (codepoint 1072) with Shift → U+0410 'А'
         const events = parseInput("\x1b[1072;2u");
-        expect(events).toEqual([kp("А", "\x1b[1072;2u", { shiftKey: true, code: "а" })]);
+        expect(events).toEqual([kp("А", "\x1b[1072;2u", { shiftKey: true, code: "KeyF" })]);
     });
 
     it("parses Kitty CSI u: Shift+а cyrillic with shiftedKey sub-parameter (\\x1b[1072:1040;2u) → key='А'", () => {
         // shiftedKey=1040 'А'
         const events = parseInput("\x1b[1072:1040;2u");
-        expect(events).toEqual([kp("А", "\x1b[1072:1040;2u", { shiftKey: true, code: "а" })]);
+        expect(events).toEqual([kp("А", "\x1b[1072:1040;2u", { shiftKey: true, code: "KeyF" })]);
     });
 
     // ─── Kitty CSI u: navigation keys (sent when Kitty flags include 8) ───

@@ -317,15 +317,31 @@ export class MenuBarElement extends TUIElement {
         }
 
         const normalizedKey = event.key.toLowerCase();
-        return this.items.findIndex((item) => {
+        const mnemonics = this.items.map((item) =>
             // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-            const mnemonic = (item.mnemonic ?? item.label[0] ?? "").toLowerCase();
-            return mnemonic === normalizedKey;
-        });
+            (item.mnemonic ?? item.label[0] ?? "").toLowerCase(),
+        );
+        const byKey = mnemonics.indexOf(normalizedKey);
+        if (byKey >= 0 || isAsciiChar(event.key)) {
+            return byKey;
+        }
+        // Не-латинская раскладка (Alt+а в русской): мнемоника — по физической клавише,
+        // как у VS Code. Латинский символ решает сам, иначе на AZERTY Alt+a открыло бы Q.
+        return mnemonics.findIndex(
+            (mnemonic) => isAsciiLetter(mnemonic) && event.code === `Key${mnemonic.toUpperCase()}`,
+        );
     }
 
     private getMenuGlobalPosition(index: number): Point {
         const el = this.itemElements[index];
         return new Point(this.globalPosition.x + el.localPosition.dx, this.globalPosition.y + 1);
     }
+}
+
+function isAsciiChar(ch: string): boolean {
+    return ch.charCodeAt(0) < 0x80;
+}
+
+function isAsciiLetter(ch: string): boolean {
+    return ch.length === 1 && ch >= "a" && ch <= "z";
 }
