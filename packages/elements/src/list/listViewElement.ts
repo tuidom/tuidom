@@ -148,6 +148,12 @@ export class ListViewElement extends ScrollableElement {
     private lastLayoutViewportHeight = 0;
 
     private cursorIndex = 0;
+    /**
+     * Курсор снят ({@link clearCursor}): ни одна строка не текущая и не
+     * подсвечена. `cursorIndex` при этом хранит прежнее место — его снова
+     * займёт следующая постановка курсора.
+     */
+    private cursorCleared = false;
     private anchorIndex = 0;
     private selectedIds = new Set<string>();
     private hoveredIndex: number | null = null;
@@ -226,6 +232,7 @@ export class ListViewElement extends ScrollableElement {
         this.visibleIndexById.clear();
         this.lastLayoutScrollTop = -1;
         this.cursorIndex = 0;
+        this.cursorCleared = false;
         this.anchorIndex = 0;
         this.hoveredIndex = null;
         this.pendingCursorId = null;
@@ -287,6 +294,7 @@ export class ListViewElement extends ScrollableElement {
     // ─── Cursor / selection ───
 
     public getCursorElement(): TUIElement | null {
+        if (this.cursorCleared) return null;
         const rows = this.ensureProjection();
         if (this.cursorIndex >= 0 && this.cursorIndex < rows.length) {
             return rows[this.cursorIndex].element;
@@ -311,6 +319,26 @@ export class ListViewElement extends ScrollableElement {
             }
         }
         return result;
+    }
+
+    /**
+     * Снимает курсор: ни одна строка не текущая и не подсвечена,
+     * {@link getCursorElement} отдаёт `null`, а `Enter`/`Space` действовать не на
+     * что. Это состояние «активных нет» у quick pick'а эталона (`activeItems = []`):
+     * владелец показывает список, но выбор ещё не сделан. Курсор возвращается
+     * любой его постановкой — {@link setCursorTo}, кликом, навигацией (`↓` из
+     * снятого состояния идёт на первую строку, `↑` — на последнюю).
+     */
+    public clearCursor(): void {
+        if (this.cursorCleared) return;
+        this.cursorCleared = true;
+        this.selectedIds.clear();
+        this.markDirty();
+    }
+
+    /** Курсор снят {@link clearCursor} и с тех пор не ставился. */
+    public get isCursorCleared(): boolean {
+        return this.cursorCleared;
     }
 
     /** Ставит курсор на строку, раскрывая свёрнутых предков, и проматывает к ней. */
@@ -400,11 +428,12 @@ export class ListViewElement extends ScrollableElement {
             // Состояния строк синхронизируются здесь: layout идёт в кадре ДО
             // резолва стилей. Вариант ДЛЯ layout — без markDirty, иначе кадр
             // оставлял бы корень грязным и следующий ввод рендерил бы пустой кадр.
-            row.host.setStyleStateDuringLayout("selected", i === this.cursorIndex || this.selectedIds.has(row.id));
+            const isCursor = !this.cursorCleared && i === this.cursorIndex;
+            row.host.setStyleStateDuringLayout("selected", isCursor || this.selectedIds.has(row.id));
             row.host.setStyleStateDuringLayout("hover", i === this.hoveredIndex);
             row.host.setStyleStateDuringLayout(
                 LIST_ROW_ACTIVE_STATE,
-                i === this.hoveredIndex || (i === this.cursorIndex && listFocused),
+                i === this.hoveredIndex || (isCursor && listFocused),
             );
             this.layoutChild(row.host, 0, y, BoxConstraints.tight(new Size(size.width, 1)));
         }
@@ -463,7 +492,7 @@ export class ListViewElement extends ScrollableElement {
     public override inspectState(): Record<string, unknown> {
         const rows = this.ensureProjection();
         return {
-            cursorId: this.rowIdAt(this.cursorIndex),
+            cursorId: this.cursorCleared ? null : this.rowIdAt(this.cursorIndex),
             selectedIds: [...this.selectedIds].sort(),
             collapsedIds: [...this.collapsedIds].sort(),
             visibleCount: rows.length,
@@ -713,6 +742,7 @@ export class ListViewElement extends ScrollableElement {
         if (index >= rows.length) index = rows.length - 1;
         if (index < 0) return;
 
+        this.cursorCleared = false;
         this.cursorIndex = index;
         this.anchorIndex = index;
         this.selectedIds.clear();
@@ -726,6 +756,7 @@ export class ListViewElement extends ScrollableElement {
         if (index >= rows.length) index = rows.length - 1;
         if (index < 0) return;
 
+        this.cursorCleared = false;
         this.cursorIndex = index;
         this.selectRange(this.anchorIndex, index);
         this.applyCursor(index);
@@ -757,6 +788,7 @@ export class ListViewElement extends ScrollableElement {
         } else {
             this.selectedIds.add(id);
         }
+        this.cursorCleared = false;
         this.cursorIndex = index;
         this.anchorIndex = index;
         this.applyCursor(index);
@@ -781,6 +813,13 @@ export class ListViewElement extends ScrollableElement {
     // ─── Private: input handlers ───
 
     private handleKeypress(event: TUIKeyboardEvent): void {
+        // Из снятого курсора стрелки не шагают от прежнего места, а встают на
+        // край списка — как у списков эталона без фокусной строки.
+        if (this.cursorCleared && (event.key === "ArrowUp" || event.key === "ArrowDown")) {
+            if (event.key === "ArrowDown") this.focusFirst();
+            else this.focusLast();
+            return;
+        }
         switch (event.key) {
             case "ArrowUp":
                 if (event.shiftKey) {
@@ -888,7 +927,7 @@ export class ListViewElement extends ScrollableElement {
 
     private handleExpandOrMoveToChild(): void {
         const rows = this.ensureProjection();
-        const row = rows.at(this.cursorIndex);
+        const row = this.cursorCleared ? undefined : rows.at(this.cursorIndex);
         if (!row || !this.rowHasChildren(row.id)) return;
 
         if (this.collapsedIds.has(row.id)) {
@@ -901,7 +940,7 @@ export class ListViewElement extends ScrollableElement {
 
     private handleCollapseOrMoveToParent(): void {
         const rows = this.ensureProjection();
-        const row = rows.at(this.cursorIndex);
+        const row = this.cursorCleared ? undefined : rows.at(this.cursorIndex);
         if (!row) return;
 
         if (this.rowHasChildren(row.id) && !this.collapsedIds.has(row.id)) {
@@ -918,14 +957,14 @@ export class ListViewElement extends ScrollableElement {
 
     private activateCursorRow(): void {
         const rows = this.ensureProjection();
-        const row = rows.at(this.cursorIndex);
+        const row = this.cursorCleared ? undefined : rows.at(this.cursorIndex);
         if (!row) return;
         this.onActivate?.(row.element);
     }
 
     private toggleCursorRow(): void {
         const rows = this.ensureProjection();
-        const row = rows.at(this.cursorIndex);
+        const row = this.cursorCleared ? undefined : rows.at(this.cursorIndex);
         if (!row || !this.rowHasChildren(row.id)) return;
         this.toggleCollapsed(row.id);
     }

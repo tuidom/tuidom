@@ -388,7 +388,7 @@ will be generated from source — see `docs/TODO/ApiReferenceGeneration.md`.
 | `SelectBoxElement` | dropdown select |
 | `CompletionListElement` / `CompletionWidgetElement` / `CompletionDetailsElement` | completion popup family |
 | **Lists** | |
-| `ListViewElement` | virtualized list of element rows (100k rows ≈ 1 ms/frame); cursor, multi-select, typeahead, collapsible hierarchy |
+| `ListViewElement` | virtualized list of element rows (100k rows ≈ 1 ms/frame); cursor (`clearCursor()` — no current row), multi-select, typeahead, collapsible hierarchy |
 | `TreeViewElement` | data-driven tree (provider model) |
 | **Menus** | |
 | `MenuBarElement` / `MenuBarItemElement` | horizontal menu bar with mnemonics |
