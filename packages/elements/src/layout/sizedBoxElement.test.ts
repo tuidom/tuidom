@@ -1,7 +1,9 @@
-import { BoxConstraints, Size } from "@tuidom/core/common/geometryPromitives";
+import { BoxConstraints, Point, Size } from "@tuidom/core/common/geometryPromitives";
 import { TUIElement } from "@tuidom/core/dom/tuiElement";
 import { renderElement } from "@tuidom/testing/renderElement";
 import { describe, expect, it } from "vitest";
+
+import { TextLabelElement } from "../text/textLabelElement.ts";
 
 import { SizedBoxElement } from "./sizedBoxElement.ts";
 
@@ -98,5 +100,14 @@ describe("SizedBoxElement", () => {
         box.setChild(null);
         expect(first.getParent()).toBeNull();
         expect(box.getChildren()).toEqual([]);
+    });
+});
+
+describe("SizedBoxElement — отрисовка", () => {
+    it("рисует ребёнка в своём прямоугольнике", () => {
+        const box = new SizedBoxElement(6, 1);
+        box.setChild(new TextLabelElement("hello"));
+        const backend = renderElement(box, 6, 1);
+        expect(backend.getTextAt(new Point(0, 0), 5)).toBe("hello");
     });
 });
