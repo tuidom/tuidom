@@ -97,3 +97,14 @@ describe("ListViewElement.clearCursor", () => {
         expect(list.getCursorElement()).toBeNull();
     });
 });
+
+describe("ListViewElement — снимок свёрнутых и развёрнутые группы", () => {
+    it("getCollapsedIds и hasVisibleExpandedRow следуют за свёрткой", () => {
+        const { list } = setup();
+        expect(list.hasVisibleExpandedRow()).toBe(true);
+        expect(list.getCollapsedIds()).toEqual([]);
+        list.setCollapsed("r1", true);
+        expect(list.getCollapsedIds()).toEqual(["r1"]);
+        expect(list.hasVisibleExpandedRow()).toBe(false);
+    });
+});
