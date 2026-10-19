@@ -293,7 +293,7 @@ export class EditorPartElement extends TUIElement {
             // следующей группы, в rows — поверх последней строки предыдущей
             // (первая строка нижней это её табы). Явная укладка каждый layout:
             // ленивый layoutSize со старым боксом ломает hit-test (контракт
-            // WorkbenchLayoutElement).
+            // SashElement, docs/LAYOUT.md).
             if (i < this.sashes.length) {
                 const sashSize = columns ? new Size(1, containerSize.height) : new Size(containerSize.width, 1);
                 const sashMain = columns ? offset : Math.max(0, offset - 1);

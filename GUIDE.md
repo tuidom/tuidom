@@ -175,11 +175,12 @@ contract:
 - `"passthrough"` — clicks go through, the session doesn't auto-close (find
   widgets, menu bar dropdowns).
 
-### Workbench shell
+### Splitters
 
-For an IDE-like shell there is `WorkbenchLayoutElement` (sidebar + editor
-area + collapsible bottom panel, VS Code-style) with mouse-draggable
-`SashElement` splitters between the parts.
+`SashElement` is a mouse-draggable splitter between parts; the host container
+lays it out on the boundary and turns the reported coordinate into a size.
+An IDE-like workbench shell is application-level and lives in the host
+(Diode), not in the engine.
 
 ## Styling and themes
 
@@ -397,7 +398,6 @@ will be generated from source — see `docs/TODO/ApiReferenceGeneration.md`.
 | `BodyElement` | full-screen root: title, content slot, overlay layer |
 | `TitledPanelElement` | panel with a title row |
 | `EditorPartElement` / `EditorTabStripElement` / `EditorTabItemElement` | editor area with a tab strip |
-| `WorkbenchLayoutElement` | sidebar + editor + bottom panel shell |
 | `SashElement` | invisible draggable splitter |
 | `OverlayHostElement` | content + local overlay layer on top |
 | **Scrolling** | |

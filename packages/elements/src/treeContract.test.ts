@@ -16,7 +16,6 @@ import { ListViewElement } from "./list/listViewElement.ts";
 import { ScrollContainerElement } from "./scrollbar/scrollContainerElement.ts";
 import { ScrollViewport } from "./scrollbar/scrollViewport.ts";
 import { TitledPanelElement } from "./titledpanel/titledPanelElement.ts";
-import { WorkbenchLayoutElement } from "./workbenchlayout/workbenchLayoutElement.ts";
 
 /**
  * Контрактный тест на топологию дерева — один на все контейнеры.
@@ -27,9 +26,9 @@ import { WorkbenchLayoutElement } from "./workbenchlayout/workbenchLayoutElement
  * элемент полностью в дереве — parent-симметрия и root (иначе focus()/open()
  * молча не работают, markStyleDirty не находит путь вверх и т.д.).
  *
- * Кейсы, где контейнер прячет часть детей из getChildren() (неактивная
- * вкладка панели, скрытая нижняя панель) — отдельными тестами ниже: это
- * ровно те места, где нисходящая пропагация root дырявая по построению.
+ * Кейс скрытого ребёнка (`hidden`: неактивная вкладка, скрытая панель) —
+ * отдельным тестом ниже: это ровно то место, где нисходящая пропагация root
+ * была дырявой по построению.
  */
 
 interface ContainerCase {
@@ -162,15 +161,6 @@ const CASES: ContainerCase[] = [
             return { container, child };
         },
     },
-    {
-        name: "WorkbenchLayoutElement (видимая левая панель)",
-        build: () => {
-            const container = new WorkbenchLayoutElement();
-            const child = new TUIElement();
-            container.setLeftPanel(child);
-            return { container, child };
-        },
-    },
 ];
 
 function rootInto(container: TUIElement): BodyElement {
@@ -208,17 +198,18 @@ describe("контракт контейнера: дети, скрытые из g
     // Закрыто структурно: root производный от цепочки родителей, скрытые дети
     // остаются в дереве с hidden=true.
     //
-    // Кейсы вкладок панели уехали в vexx вместе с `PanelContainerElement`
-    // (виджет прикладной: его API оперировал понятиями панели IDE).
+    // Кейсы вкладок панели и скрытой нижней панели уехали в Diode вместе с
+    // `PanelContainerElement` и `WorkbenchLayoutElement` (виджеты прикладные:
+    // их API оперировал понятиями IDE).
 
-    it("скрытая нижняя панель укоренена вместе с layout (производный root)", () => {
-        const container = new WorkbenchLayoutElement();
-        const bottom = new TUIElement();
-        container.setBottomPanel(bottom);
-        container.setBottomPanelVisible(false);
+    it("скрытый ребёнок укоренён вместе с контейнером (производный root)", () => {
+        const container = new VStackElement();
+        const hidden = new TUIElement();
+        container.addChild(hidden, { width: "fill", height: 1 });
+        hidden.hidden = true;
 
         const body = rootInto(container);
 
-        expect(bottom.getRoot()).toBe(body);
+        expect(hidden.getRoot()).toBe(body);
     });
 });
