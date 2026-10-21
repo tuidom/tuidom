@@ -112,7 +112,10 @@ describe("TreeViewElement — expandOnlyOnTwistieClick", () => {
             enter(tree);
             await settle();
             expect(tree.contentHeight).toBe(2);
-            expect(onActivate).toHaveBeenCalledWith(expect.objectContaining({ id: "src" }));
+            expect(onActivate).toHaveBeenCalledWith(expect.objectContaining({ id: "src" }), {
+                pinned: true,
+                preserveFocus: false,
+            });
         });
 
         it("double click on the name toggles the folder once", async () => {
@@ -169,7 +172,10 @@ describe("TreeViewElement — expandOnlyOnTwistieClick", () => {
             enter(tree);
             await settle();
             expect(tree.contentHeight).toBe(2);
-            expect(onActivate).toHaveBeenCalledWith(expect.objectContaining({ id: "README.md" }));
+            expect(onActivate).toHaveBeenCalledWith(expect.objectContaining({ id: "README.md" }), {
+                pinned: true,
+                preserveFocus: false,
+            });
         });
 
         it("double click on the name expands and collapses back, like the reference", async () => {
@@ -184,7 +190,10 @@ describe("TreeViewElement — expandOnlyOnTwistieClick", () => {
             tree.onActivate = onActivate;
             await doubleClick(tree, 3, 1);
             expect(onActivate).toHaveBeenCalledOnce();
-            expect(onActivate).toHaveBeenCalledWith(expect.objectContaining({ id: "README.md" }));
+            expect(onActivate).toHaveBeenCalledWith(expect.objectContaining({ id: "README.md" }), {
+                pinned: true,
+                preserveFocus: false,
+            });
         });
 
         it("click on the chevron toggles once, not twice", async () => {

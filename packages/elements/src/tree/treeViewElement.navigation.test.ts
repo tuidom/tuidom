@@ -311,7 +311,7 @@ describe("TreeViewElement", () => {
             tree.onActivate = activateSpy;
 
             app.sendKey("Enter");
-            expect(activateSpy).toHaveBeenCalledWith(FLAT_TREE[0]);
+            expect(activateSpy).toHaveBeenCalledWith(FLAT_TREE[0], { pinned: true, preserveFocus: false });
         });
 
         it("toggles expand with Space on collapsible", async () => {

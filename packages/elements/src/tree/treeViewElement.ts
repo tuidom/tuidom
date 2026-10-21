@@ -36,6 +36,22 @@ function rowLabel(item: ITreeItem): string {
     return compactSegments(item)?.join(SEGMENT_SEPARATOR) ?? item.label;
 }
 
+/**
+ * Как открыть строку — `IOpenEvent.editorOptions` эталона (`ResourceNavigator`):
+ * одиночный клик — превью, фокус остаётся в дереве; двойной клик и Enter —
+ * постоянно, с фокусом; средний клик — постоянно, без фокуса.
+ */
+export interface TreeActivateOptions {
+    /** Открыть постоянно, а не превью. */
+    readonly pinned: boolean;
+    /** Оставить фокус в дереве. */
+    readonly preserveFocus: boolean;
+}
+
+const OPEN_PREVIEW: TreeActivateOptions = { pinned: false, preserveFocus: true };
+const OPEN_PINNED: TreeActivateOptions = { pinned: true, preserveFocus: false };
+const OPEN_PINNED_IN_BACKGROUND: TreeActivateOptions = { pinned: true, preserveFocus: true };
+
 interface FlatTreeNode<T> {
     element: T;
     depth: number;
@@ -80,7 +96,8 @@ export class TreeViewElement<T> extends ScrollableElement {
     private typeaheadTimer: ReturnType<typeof setTimeout> | null = null;
 
     public onSelect: ((item: T) => void) | null = null;
-    public onActivate: ((item: T) => void) | null = null;
+    /** Открыть строку: Enter, двойной клик по листу, а с {@link openOnSingleClick} — и одиночный. */
+    public onActivate: ((item: T, options: TreeActivateOptions) => void) | null = null;
     public onExpandedChanged: ((element: T, expanded: boolean) => void) | null = null;
     public onContextMenu: ((element: T, screenX: number, screenY: number) => void) | null = null;
     /** Сменился текущий сегмент компактной строки (Left/Right, клик, API). */
@@ -94,15 +111,27 @@ export class TreeViewElement<T> extends ScrollableElement {
      * решает по узлу. Читается на каждом жесте — менять можно на лету.
      */
     public expandOnlyOnTwistieClick: boolean | ((element: T) => boolean);
+    /**
+     * Открывать лист одиночным кликом — `workbench.list.openMode: singleClick`
+     * эталона. Клик открывает превью ({@link TreeActivateOptions}), средний
+     * клик — постоянно; клик с Ctrl/Shift только выделяет. `false` (по
+     * умолчанию): лист открывают двойной клик и Enter. Читается на каждом жесте.
+     */
+    public openOnSingleClick: boolean | (() => boolean);
 
     public constructor(
         provider: ITreeDataProvider<T>,
-        options?: { leftPadding?: number; expandOnlyOnTwistieClick?: boolean | ((element: T) => boolean) },
+        options?: {
+            leftPadding?: number;
+            expandOnlyOnTwistieClick?: boolean | ((element: T) => boolean);
+            openOnSingleClick?: boolean | (() => boolean);
+        },
     ) {
         super();
         this.focusable = true;
         this.leftPadding = options?.leftPadding ?? 0;
         this.expandOnlyOnTwistieClick = options?.expandOnlyOnTwistieClick ?? true;
+        this.openOnSingleClick = options?.openOnSingleClick ?? false;
         this.provider = provider;
         this.provider.onChange = (element) => {
             void this.refresh(element);
@@ -913,11 +942,16 @@ export class TreeViewElement<T> extends ScrollableElement {
         }
     }
 
-    /** Enter — `list.select` эталона: переключает узел (если не только шевроном) и открывает строку. */
+    /** Enter — `list.select` эталона: переключает узел (если не только шевроном) и открывает строку постоянно. */
     private activateSelected(): void {
         const node = this.flatNodes[this.selectedIndex];
         if (this.expandsOnRowGesture(node)) void this.toggleExpand(node.element);
-        this.onActivate?.(node.element);
+        this.onActivate?.(node.element, OPEN_PINNED);
+    }
+
+    private opensOnSingleClick(): boolean {
+        const single = this.openOnSingleClick;
+        return typeof single === "function" ? single() : single;
     }
 
     /** Переключают ли узел клик по строке и Enter (см. {@link expandOnlyOnTwistieClick}). */
@@ -976,6 +1010,10 @@ export class TreeViewElement<T> extends ScrollableElement {
         const index = this.scrollTop + event.localY;
         if (index < 0 || index >= this.flatNodes.length) return;
 
+        if (event.button === "middle") {
+            this.handleMiddleClick(index);
+            return;
+        }
         if (event.button !== "left") return; // правый клик несёт событие contextmenu
 
         if (event.ctrlKey) {
@@ -1001,13 +1039,25 @@ export class TreeViewElement<T> extends ScrollableElement {
         if (this.isOnTwistie(node, clickX) || this.expandsOnRowGesture(node)) {
             void this.toggleExpand(node.element);
         }
+        // Второй клик двойного тоже открывает превью (у событий нет `detail`
+        // эталона) — повтор того же превью безвреден, следом dblclick прикалывает.
+        if (!node.item.collapsible && this.opensOnSingleClick()) this.onActivate?.(node.element, OPEN_PREVIEW);
+    }
+
+    /** Средний клик эталона (`onPointer`, `isMiddleClick`): лист — постоянно, фокус остаётся в дереве. */
+    private handleMiddleClick(index: number): void {
+        const node = this.flatNodes[index];
+        if (node.item.collapsible || !this.opensOnSingleClick()) return;
+        this.setSelectedIndex(index);
+        this.onActivate?.(node.element, OPEN_PINNED_IN_BACKGROUND);
     }
 
     /**
      * Движок шлёт dblclick после второго click. Каждый клик уже переключил
      * узел, если строка раскрывается кликом или клик пришёлся в шеврон, —
      * тогда dblclick узел не трогает (у эталона двойной клик по папке так же
-     * раскрывает и сворачивает её). Иначе переключает он.
+     * раскрывает и сворачивает её). Иначе переключает он. Лист двойной клик
+     * открывает постоянно (`onMouseDblClick` эталона: `pinned`, фокус уходит).
      */
     private handleDblClick(event: TUIMouseEvent): void {
         const index = this.scrollTop + event.localY;
@@ -1015,7 +1065,7 @@ export class TreeViewElement<T> extends ScrollableElement {
 
         const node = this.flatNodes[index];
         if (!node.item.collapsible) {
-            this.onActivate?.(node.element);
+            this.onActivate?.(node.element, OPEN_PINNED);
             return;
         }
         if (this.isOnTwistie(node, this.scrollLeft + event.localX) || this.expandsOnRowGesture(node)) return;
