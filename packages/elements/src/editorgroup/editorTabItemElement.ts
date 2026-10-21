@@ -13,6 +13,9 @@ const READONLY_CHAR = "\uea75"; // nf-cod-lock
 /** Стилевое состояние вкладки удалённого файла (см. {@link EditorTabItemElement.setDeleted}). */
 export const DELETED_STATE = "deleted";
 
+/** Стилевое состояние вкладки-предпросмотра (см. {@link EditorTabItemElement.setPreview}). */
+export const PREVIEW_STATE = "preview";
+
 export class EditorTabItemElement extends TUIElement {
     private label: string;
     private icon: string;
@@ -20,6 +23,7 @@ export class EditorTabItemElement extends TUIElement {
     private modified: boolean;
     private readOnly: boolean;
     private deleted: boolean;
+    private preview: boolean;
     private paddingLeft: number;
     private paddingRight: number;
     private hovered = false;
@@ -37,6 +41,7 @@ export class EditorTabItemElement extends TUIElement {
             modified?: boolean;
             readOnly?: boolean;
             deleted?: boolean;
+            preview?: boolean;
             paddingLeft?: number;
             paddingRight?: number;
         },
@@ -49,6 +54,8 @@ export class EditorTabItemElement extends TUIElement {
         this.readOnly = options?.readOnly ?? false;
         this.deleted = options?.deleted ?? false;
         this.setStyleState(DELETED_STATE, this.deleted);
+        this.preview = options?.preview ?? false;
+        this.setStyleState(PREVIEW_STATE, this.preview);
         this.paddingLeft = options?.paddingLeft ?? 1;
         this.paddingRight = options?.paddingRight ?? 1;
 
@@ -149,6 +156,23 @@ export class EditorTabItemElement extends TUIElement {
         this.markDirty();
     }
 
+    public getPreview(): boolean {
+        return this.preview;
+    }
+
+    /**
+     * Вкладка-предпросмотр (preview editor VS Code): имя курсивом, на элементе —
+     * стилевое состояние {@link PREVIEW_STATE}. Своего цвета у предпросмотра в
+     * VS Code нет; состояние — зацепка для владельца, если курсив терминал не
+     * рисует (тогда метка выглядит как у обычной вкладки).
+     */
+    public setPreview(preview: boolean): void {
+        if (this.preview === preview) return;
+        this.preview = preview;
+        this.setStyleState(PREVIEW_STATE, preview);
+        this.markDirty();
+    }
+
     public getPaddingLeft(): number {
         return this.paddingLeft;
     }
@@ -243,8 +267,11 @@ export class EditorTabItemElement extends TUIElement {
             }
         }
 
-        // Label — struck through when the file is gone (VS Code strikethrough decoration).
-        const labelStyle = this.deleted ? StyleFlags.Strikethrough : StyleFlags.None;
+        // Label — struck through when the file is gone (VS Code strikethrough decoration),
+        // italic while the tab is a preview (VS Code preview editor).
+        const labelStyle =
+            (this.deleted ? StyleFlags.Strikethrough : StyleFlags.None) |
+            (this.preview ? StyleFlags.Italic : StyleFlags.None);
         for (let i = 0; i < this.label.length && x < width; i++) {
             context.setCell(x, 0, { char: this.label[i], fg: resolved.fg, bg: resolved.bg, style: labelStyle });
             x += 1;

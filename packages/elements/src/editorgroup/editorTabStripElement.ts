@@ -20,6 +20,11 @@ export interface TabInfo {
      * `list.errorForeground` (как orphaned-вкладка VS Code).
      */
     isDeleted?: boolean;
+    /**
+     * Вкладка-предпросмотр: следующее открытие превью её заменит. Имя —
+     * курсивом (как preview editor VS Code).
+     */
+    isPreview?: boolean;
 }
 
 // ─── EditorTabStripElement ───
@@ -59,7 +64,7 @@ export class EditorTabStripElement extends TUIElement {
         this.markDirty();
     }
 
-    /** Observable state: tab labels with active/modified/readonly/deleted flags. */
+    /** Observable state: tab labels with active/modified/readonly/deleted/preview flags. */
     public override inspectState(): Record<string, unknown> {
         return {
             activeIndex: this.activeIndexValue,
@@ -69,6 +74,7 @@ export class EditorTabStripElement extends TUIElement {
                 modified: item.getModified(),
                 readOnly: item.getReadOnly(),
                 deleted: item.getDeleted(),
+                preview: item.getPreview(),
             })),
         };
     }
@@ -91,11 +97,13 @@ export class EditorTabStripElement extends TUIElement {
                 item.setModified(tab.isModified);
                 item.setReadOnly(tab.isReadOnly);
                 item.setDeleted(tab.isDeleted ?? false);
+                item.setPreview(tab.isPreview ?? false);
             } else {
                 item = new EditorTabItemElement(tab.label, tab.icon, tab.iconColor, {
                     modified: tab.isModified,
                     readOnly: tab.isReadOnly,
                     deleted: tab.isDeleted ?? false,
+                    preview: tab.isPreview ?? false,
                     paddingLeft: 2,
                     paddingRight: 2,
                 });
