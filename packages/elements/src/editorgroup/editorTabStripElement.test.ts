@@ -124,6 +124,25 @@ describe("EditorTabStripElement", () => {
         });
     });
 
+    describe("предпросмотр", () => {
+        it("флаг доезжает до новой и до переиспользованной вкладки и снимается", () => {
+            const strip = new EditorTabStripElement();
+            const preview = makeTabs("a.ts", "b.ts");
+            preview[1].isPreview = true;
+            strip.setTabs(preview);
+            const [pinned, item] = strip.getItemElements();
+            expect(pinned.getPreview()).toBe(false);
+            expect(item.getPreview()).toBe(true);
+
+            strip.setTabs(makeTabs("a.ts", "b.ts"));
+            expect(strip.getItemElements()[1]).toBe(item);
+            expect(item.getPreview()).toBe(false);
+
+            strip.setTabs(preview);
+            expect(item.getPreview()).toBe(true);
+        });
+    });
+
     describe("callbacks", () => {
         it("onTabActivate fires with correct index on tab click", () => {
             const strip = new EditorTabStripElement();
