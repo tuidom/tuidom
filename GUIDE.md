@@ -161,6 +161,17 @@ scrollable child), `ScrollBarDecorator` draws the scrollbar next to it:
 ScrollBarDecorator → ScrollViewport → TextBlockElement
 ```
 
+A child can also mark rows on the vertical bar (an overview ruler, as in VS
+Code): implement `getScrollBarMarkers()` from `IScrollable` and return
+`{ start, end, color, priority }` spans in content rows. The decorator's
+`markerPlacement` decides where they go: `"inside"` (default) draws them over
+the bar, the thumb then moving in whole cells; `"outside"` gives them a column
+of their own left of an untouched bar; `"auto"` picks outside from
+`markerColumnMinWidth` (80) columns up; `"none"` ignores them. A cell holding
+several marks shows the highest priority's colour and a density glyph
+(`─ ═ ≡`); rows covered by marks longer than one row fill solid, with
+half-block ends.
+
 ### Overlays (popups, dialogs)
 
 Anything that visually "overflows" its anchor — popup, dropdown, dialog — is

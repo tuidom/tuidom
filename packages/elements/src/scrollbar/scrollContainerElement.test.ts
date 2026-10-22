@@ -1,4 +1,4 @@
-import { packRgb } from "@tuidom/core/common/colorUtils";
+import { compositeOver, packRgb, packRgba } from "@tuidom/core/common/colorUtils";
 import { BoxConstraints, Offset, Point, Size } from "@tuidom/core/common/geometryPromitives";
 import { STYLE_TOKEN_DEFAULTS } from "@tuidom/core/dom/styles/styleTokens";
 import { ROOT_STYLE_CONTEXT } from "@tuidom/core/dom/styles/tuiStyle";
@@ -10,7 +10,9 @@ import { describe, expect, it } from "vitest";
 
 import { TextBlockElement } from "../text/textBlockElement.ts";
 
+import type { IScrollBarMarker } from "./iScrollable.ts";
 import { ScrollableElement, type ScrollViewportInfo } from "./scrollableElement.ts";
+import { getFlatTrackColor } from "./scrollBarRenderer.ts";
 import { ScrollBarDecorator } from "./scrollContainerElement.ts";
 import { ScrollViewport } from "./scrollViewport.ts";
 
@@ -411,5 +413,205 @@ describe("ScrollBarDecorator — цвета из токенов и каскад�
 
         expect(backend.getFgAt(new Point(11, 0))).toBe(STYLE_TOKEN_DEFAULTS["scrollbarSlider.background"]);
         expect(backend.getFgAt(new Point(11, 4))).toBe(STYLE_TOKEN_DEFAULTS["scrollbar.background"]);
+    });
+});
+
+class MarkedViewport extends ScrollViewport {
+    public markers: IScrollBarMarker[] = [];
+
+    public getScrollBarMarkers(): readonly IScrollBarMarker[] {
+        return this.markers;
+    }
+}
+
+describe("ScrollBarDecorator — markers", () => {
+    const thumb = packRgb(10, 10, 10);
+    const track = packRgb(20, 20, 20);
+    const background = packRgb(30, 30, 30);
+    const red = packRgb(200, 0, 0);
+    const blue = packRgb(0, 0, 200);
+
+    function renderMarked(markers: IScrollBarMarker[]): MockTerminalBackend {
+        const size = new Size(12, 5);
+        const backend = new MockTerminalBackend(size);
+        const termScreen = new TerminalScreen(size);
+        const viewport = new MarkedViewport(new TextBlockElement(50));
+        viewport.markers = markers;
+        const container = new ScrollBarDecorator(viewport);
+        container.setStyleVars({ "scrollbarSlider.background": thumb, "scrollbar.background": track });
+        container.style = { bg: background };
+        return renderContainer(container, termScreen, backend);
+    }
+
+    it("draws density glyphs over the track and the thumb", () => {
+        // 50 rows over 5 cells → 10 rows per cell; the thumb is the top cell.
+        const backend = renderMarked([
+            { start: 0, end: 1, color: red, priority: 1 },
+            { start: 20, end: 21, color: blue, priority: 1 },
+            { start: 22, end: 23, color: blue, priority: 1 },
+            { start: 40, end: 41, color: red, priority: 1 },
+            { start: 42, end: 43, color: red, priority: 1 },
+            { start: 44, end: 45, color: red, priority: 1 },
+        ]);
+
+        expectScreen(
+            backend,
+            screen`
+                Line 001   ─
+                Line 002
+                Line 003   ═
+                Line 004
+                Line 005   ≡
+            `,
+        );
+        // Over the thumb the marker keeps its colour and the thumb becomes the cell background.
+        expect(backend.getFgAt(new Point(11, 0))).toBe(red);
+        expect(backend.getBgAt(new Point(11, 0))).toBe(thumb);
+        // The track is flat with markers: no ░ shade, the same colour under a mark and without one.
+        const flatTrack = getFlatTrackColor(track, background);
+        expect(backend.getFgAt(new Point(11, 2))).toBe(blue);
+        expect(backend.getBgAt(new Point(11, 2))).toBe(flatTrack);
+        expect(backend.getBgAt(new Point(11, 1))).toBe(flatTrack);
+    });
+
+    it("fills a block of marked rows solid, the thumb tinting it", () => {
+        // Rows 0..29 marked: cells 0..2 solid, cell 0 under the thumb.
+        const translucentThumb = packRgba(255, 255, 255, 128);
+        const size = new Size(12, 5);
+        const backend = new MockTerminalBackend(size);
+        const termScreen = new TerminalScreen(size);
+        const viewport = new MarkedViewport(new TextBlockElement(50));
+        viewport.markers = [{ start: 0, end: 30, color: red, priority: 1 }];
+        const container = new ScrollBarDecorator(viewport);
+        container.setStyleVars({ "scrollbarSlider.background": translucentThumb, "scrollbar.background": track });
+        container.style = { bg: background };
+        renderContainer(container, termScreen, backend);
+
+        expect(backend.getTextAt(new Point(11, 1), 1)).toBe(" ");
+        expect(backend.getBgAt(new Point(11, 1))).toBe(red);
+        expect(backend.getBgAt(new Point(11, 2))).toBe(red);
+        expect(backend.getBgAt(new Point(11, 0))).toBe(compositeOver(translucentThumb, red));
+        expect(backend.getBgAt(new Point(11, 3))).toBe(getFlatTrackColor(track, background));
+    });
+
+    it("draws the ends of a run as half blocks", () => {
+        // Rows 15..34 over 10-row cells: bottom half of cell 1, cell 2 whole, top half of cell 3.
+        const backend = renderMarked([{ start: 15, end: 35, color: red, priority: 1 }]);
+        expect(backend.getTextAt(new Point(11, 1), 1)).toBe("▄");
+        expect(backend.getFgAt(new Point(11, 1))).toBe(red);
+        expect(backend.getBgAt(new Point(11, 1))).toBe(getFlatTrackColor(track, background));
+        expect(backend.getBgAt(new Point(11, 2))).toBe(red);
+        expect(backend.getTextAt(new Point(11, 3), 1)).toBe("▀");
+    });
+
+    it("keeps the classic ░ track for a child without markers", () => {
+        const { container, backend, termScreen } = createScrollContainer(12, 5, 50);
+        renderContainer(container, termScreen, backend);
+        expect(backend.getTextAt(new Point(11, 3), 1)).toBe("░");
+    });
+
+    it("paints a shared cell with the highest-priority colour", () => {
+        const backend = renderMarked([
+            { start: 20, end: 21, color: blue, priority: 1 },
+            { start: 21, end: 22, color: red, priority: 7 },
+        ]);
+        expect(backend.getFgAt(new Point(11, 2))).toBe(red);
+    });
+
+    it("composites a translucent thumb over the column background", () => {
+        const size = new Size(12, 5);
+        const backend = new MockTerminalBackend(size);
+        const termScreen = new TerminalScreen(size);
+        const viewport = new MarkedViewport(new TextBlockElement(50));
+        viewport.markers = [{ start: 0, end: 1, color: red, priority: 1 }];
+        const container = new ScrollBarDecorator(viewport);
+        const translucentThumb = packRgba(255, 255, 255, 128);
+        container.setStyleVars({ "scrollbarSlider.background": translucentThumb, "scrollbar.background": track });
+        container.style = { bg: background };
+        renderContainer(container, termScreen, backend);
+
+        expect(backend.getBgAt(new Point(11, 0))).toBe(compositeOver(translucentThumb, background));
+    });
+});
+
+describe("ScrollBarDecorator — marker placement", () => {
+    const thumb = packRgb(10, 10, 10);
+    const track = packRgb(20, 20, 20);
+    const background = packRgb(30, 30, 30);
+    const red = packRgb(200, 0, 0);
+
+    function setup(
+        width: number,
+        placement: ScrollBarDecorator["markerPlacement"],
+        markers: IScrollBarMarker[],
+        lineCount = 50,
+    ): { container: ScrollBarDecorator; viewport: MarkedViewport; backend: MockTerminalBackend } {
+        const size = new Size(width, 5);
+        const backend = new MockTerminalBackend(size);
+        const termScreen = new TerminalScreen(size);
+        const viewport = new MarkedViewport(new TextBlockElement(lineCount));
+        viewport.markers = markers;
+        const container = new ScrollBarDecorator(viewport);
+        container.markerPlacement = placement;
+        container.markerColumnMinWidth = 20;
+        container.setStyleVars({ "scrollbarSlider.background": thumb, "scrollbar.background": track });
+        container.style = { bg: background };
+        renderContainer(container, termScreen, backend);
+        return { container, viewport, backend };
+    }
+
+    const mark: IScrollBarMarker = { start: 20, end: 21, color: red, priority: 1 };
+
+    it("outside: a marker column left of an untouched bar, the child one column narrower", () => {
+        const { viewport, backend } = setup(12, "outside", [mark]);
+        expect(viewport.layoutSize.width).toBe(10);
+        expect(backend.getTextAt(new Point(10, 2), 1)).toBe("─");
+        expect(backend.getFgAt(new Point(10, 2))).toBe(red);
+        expect(backend.getBgAt(new Point(10, 2))).toBe(background);
+        // The bar keeps its classic glyphs.
+        expect(backend.getTextAt(new Point(11, 0), 1)).toBe("█");
+        expect(backend.getTextAt(new Point(11, 2), 1)).toBe("░");
+    });
+
+    it("inside: the thumb moves in whole cells even with no markers at all", () => {
+        // 50 rows, viewport 5, scrollTop 7: the classic thumb would end on a half cell.
+        const { container, viewport, backend } = setup(12, "inside", []);
+        viewport.scrollTop = 7;
+        const termScreen = new TerminalScreen(new Size(12, 5));
+        renderContainer(container, termScreen, backend);
+        const column = [0, 1, 2, 3, 4].map((y) => backend.getTextAt(new Point(11, y), 1));
+        expect(column.every((char) => char === " ")).toBe(true);
+        // One-cell thumb at round(7 / 45 * 4) = 1, drawn as the cell background.
+        expect([0, 1, 2].map((y) => backend.getBgAt(new Point(11, y)))).toEqual([
+            getFlatTrackColor(track, background),
+            thumb,
+            getFlatTrackColor(track, background),
+        ]);
+    });
+
+    it("auto: outside from markerColumnMinWidth up, inside below it", () => {
+        expect(setup(20, "auto", [mark]).viewport.layoutSize.width).toBe(18);
+        expect(setup(19, "auto", [mark]).viewport.layoutSize.width).toBe(18);
+        const narrow = setup(19, "auto", [mark]);
+        expect(narrow.backend.getTextAt(new Point(18, 2), 1)).toBe("─");
+    });
+
+    it("none: markers are ignored and the bar stays classic", () => {
+        const { viewport, backend } = setup(12, "none", [mark]);
+        expect(viewport.layoutSize.width).toBe(11);
+        expect(backend.getTextAt(new Point(11, 2), 1)).toBe("░");
+    });
+
+    it("no vertical bar, no marker column", () => {
+        const { viewport } = setup(12, "outside", [mark], 3);
+        expect(viewport.layoutSize.width).toBe(12);
+    });
+
+    it("a child without markers keeps the classic bar under any placement", () => {
+        const { container, backend, termScreen, viewport } = createScrollContainer(12, 5, 50);
+        container.markerPlacement = "outside";
+        renderContainer(container, termScreen, backend);
+        expect(viewport.layoutSize.width).toBe(11);
+        expect(backend.getTextAt(new Point(11, 3), 1)).toBe("░");
     });
 });

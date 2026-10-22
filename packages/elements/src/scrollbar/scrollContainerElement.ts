@@ -3,9 +3,26 @@ import { RenderContext, TUIElement } from "@tuidom/core/dom/tuiElement";
 
 import type { IScrollable } from "./iScrollable.ts";
 import type { ScrollBarColors } from "./scrollBarRenderer.ts";
-import { renderHorizontalScrollBar, renderScrollBar } from "./scrollBarRenderer.ts";
+import {
+    renderHorizontalScrollBar,
+    renderOverviewScrollBar,
+    renderScrollBar,
+    renderScrollBarMarkerColumn,
+} from "./scrollBarRenderer.ts";
 
 export type ScrollBarPolicy = "auto" | "always" | "never";
+
+/**
+ * Where the child's scrollbar markers ({@link IScrollable.getScrollBarMarkers}) go:
+ * - `"none"` — not drawn;
+ * - `"inside"` — over the bar itself, the thumb moving in whole cells;
+ * - `"outside"` — a column of their own left of the bar, the bar untouched (costs the child a column);
+ * - `"auto"` — outside when the decorator is at least {@link ScrollBarDecorator.markerColumnMinWidth}
+ *   wide, inside otherwise.
+ */
+export type ScrollBarMarkerPlacement = "none" | "inside" | "outside" | "auto";
+
+type ResolvedMarkerPlacement = "none" | "inside" | "outside";
 
 /**
  * Draws scrollbars alongside a scrollable child.
@@ -25,6 +42,9 @@ export class ScrollBarDecorator extends TUIElement {
     private child: TUIElement & IScrollable;
     public verticalScrollBar: ScrollBarPolicy = "auto";
     public horizontalScrollBar: ScrollBarPolicy = "auto";
+    public markerPlacement: ScrollBarMarkerPlacement = "inside";
+    /** Narrowest decorator that `"auto"` gives a marker column. */
+    public markerColumnMinWidth = 80;
 
     public constructor(child: TUIElement & IScrollable) {
         super();
@@ -57,8 +77,8 @@ export class ScrollBarDecorator extends TUIElement {
     protected override performLayout(constraints: BoxConstraints): Size {
         const containerSize = super.performLayout(constraints);
 
-        const { showVertical, showHorizontal } = this.resolveScrollBarVisibility(containerSize);
-        const childWidth = containerSize.width - (showVertical ? 1 : 0);
+        const { showVertical, showHorizontal, markers } = this.resolveScrollBarVisibility(containerSize);
+        const childWidth = containerSize.width - (showVertical ? 1 : 0) - (markers === "outside" ? 1 : 0);
         const childHeight = containerSize.height - (showHorizontal ? 1 : 0);
 
         this.layoutChild(this.child, 0, 0, BoxConstraints.tight(new Size(childWidth, childHeight)));
@@ -67,7 +87,7 @@ export class ScrollBarDecorator extends TUIElement {
     }
 
     public render(context: RenderContext): void {
-        const { showVertical, showHorizontal } = this.resolveScrollBarVisibility(this.layoutSize);
+        const { showVertical, showHorizontal, markers } = this.resolveScrollBarVisibility(this.layoutSize);
 
         this.renderChildren(context);
 
@@ -83,15 +103,26 @@ export class ScrollBarDecorator extends TUIElement {
         };
 
         if (showVertical) {
-            renderScrollBar(
-                context,
-                this.layoutSize.width - 1,
-                childHeight,
-                this.child.contentHeight,
-                this.child.scrollTop,
-                childHeight,
-                colors,
-            );
+            const x = this.layoutSize.width - 1;
+            const { contentHeight, scrollTop } = this.child;
+            const markerList = markers === "none" ? [] : (this.child.getScrollBarMarkers?.() ?? []);
+            if (markers === "inside") {
+                renderOverviewScrollBar(
+                    context,
+                    x,
+                    childHeight,
+                    contentHeight,
+                    scrollTop,
+                    childHeight,
+                    colors,
+                    markerList,
+                );
+            } else {
+                renderScrollBar(context, x, childHeight, contentHeight, scrollTop, childHeight, colors);
+            }
+            if (markers === "outside") {
+                renderScrollBarMarkerColumn(context, x - 1, childHeight, contentHeight, colors.background, markerList);
+            }
         }
 
         if (showHorizontal) {
@@ -107,14 +138,30 @@ export class ScrollBarDecorator extends TUIElement {
         }
     }
 
-    private resolveScrollBarVisibility(containerSize: Size): { showVertical: boolean; showHorizontal: boolean } {
+    private resolveScrollBarVisibility(containerSize: Size): {
+        showVertical: boolean;
+        showHorizontal: boolean;
+        markers: ResolvedMarkerPlacement;
+    } {
         const showVertical = this.resolvePolicy(this.verticalScrollBar, this.child.contentHeight, containerSize.height);
+        const markers = showVertical ? this.resolveMarkerPlacement(containerSize.width) : "none";
         const showHorizontal = this.resolvePolicy(
             this.horizontalScrollBar,
             this.child.contentWidth,
-            containerSize.width - (showVertical ? 1 : 0),
+            containerSize.width - (showVertical ? 1 : 0) - (markers === "outside" ? 1 : 0),
         );
-        return { showVertical, showHorizontal };
+        return { showVertical, showHorizontal, markers };
+    }
+
+    /** Markers ride on the vertical bar: no bar, no markers (and no column for them). */
+    private resolveMarkerPlacement(width: number): ResolvedMarkerPlacement {
+        if (this.child.getScrollBarMarkers === undefined) return "none";
+        switch (this.markerPlacement) {
+            case "auto":
+                return width >= this.markerColumnMinWidth ? "outside" : "inside";
+            default:
+                return this.markerPlacement;
+        }
     }
 
     private resolvePolicy(policy: ScrollBarPolicy, contentSize: number, viewportSize: number): boolean {
