@@ -2,7 +2,12 @@ import { compositeOver, packRgb, packRgba } from "@tuidom/core/common/colorUtils
 import { describe, expect, it } from "vitest";
 
 import type { IScrollBarMarker } from "./iScrollable.ts";
-import { getFlatTrackColor, getScrollBarMarkerCells, getScrollBarMarkerChar } from "./scrollBarRenderer.ts";
+import {
+    computeScrollBarCellMetrics,
+    getFlatTrackColor,
+    getScrollBarMarkerCells,
+    getScrollBarMarkerChar,
+} from "./scrollBarRenderer.ts";
 
 const marker = (start: number, end: number, color: number, priority = 0): IScrollBarMarker => ({
     start,
@@ -145,5 +150,17 @@ describe("getFlatTrackColor", () => {
 
     it("falls back to the background for a sentinel track colour", () => {
         expect(getFlatTrackColor(-1, packRgb(1, 2, 3))).toBe(packRgb(1, 2, 3));
+    });
+});
+
+describe("computeScrollBarCellMetrics", () => {
+    it("spans the whole track when the content fits", () => {
+        expect(computeScrollBarCellMetrics(10, 8, 0, 10)).toEqual({ thumbStart: 0, thumbSize: 10 });
+    });
+
+    it("moves a whole-cell thumb proportionally", () => {
+        expect(computeScrollBarCellMetrics(10, 100, 0, 10)).toEqual({ thumbStart: 0, thumbSize: 1 });
+        expect(computeScrollBarCellMetrics(10, 100, 90, 10)).toEqual({ thumbStart: 9, thumbSize: 1 });
+        expect(computeScrollBarCellMetrics(10, 100, 45, 10)).toEqual({ thumbStart: 5, thumbSize: 1 });
     });
 });

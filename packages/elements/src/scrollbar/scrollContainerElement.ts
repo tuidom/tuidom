@@ -1,7 +1,7 @@
 import { BoxConstraints, Offset, Point, Rect, Size } from "@tuidom/core/common/geometryPromitives";
 import { RenderContext, TUIElement } from "@tuidom/core/dom/tuiElement";
 
-import type { IScrollable } from "./iScrollable.ts";
+import type { IScrollable, IScrollBarMarker } from "./iScrollable.ts";
 import type { ScrollBarColors } from "./scrollBarRenderer.ts";
 import {
     renderHorizontalScrollBar,
@@ -105,7 +105,7 @@ export class ScrollBarDecorator extends TUIElement {
         if (showVertical) {
             const x = this.layoutSize.width - 1;
             const { contentHeight, scrollTop } = this.child;
-            const markerList = markers === "none" ? [] : (this.child.getScrollBarMarkers?.() ?? []);
+            const markerList = markers === "none" ? [] : this.readMarkers();
             if (markers === "inside") {
                 renderOverviewScrollBar(
                     context,
@@ -151,6 +151,12 @@ export class ScrollBarDecorator extends TUIElement {
             containerSize.width - (showVertical ? 1 : 0) - (markers === "outside" ? 1 : 0),
         );
         return { showVertical, showHorizontal, markers };
+    }
+
+    /** Only called once {@link resolveMarkerPlacement} found the child's getter. */
+    private readMarkers(): readonly IScrollBarMarker[] {
+        /* v8 ignore next -- unreachable: placement is "none" for a child without getScrollBarMarkers */
+        return this.child.getScrollBarMarkers?.() ?? [];
     }
 
     /** Markers ride on the vertical bar: no bar, no markers (and no column for them). */

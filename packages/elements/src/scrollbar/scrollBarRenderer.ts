@@ -92,10 +92,17 @@ export interface ScrollBarMarkerCell {
 
 export type ScrollBarMarkerFill = "full" | "top" | "bottom";
 
+/** Marks sharing a colour and priority, and (once a cell asks) the cells they fill. */
+interface MarkerKind {
+    readonly spans: { start: number; end: number }[];
+    fills: (ScrollBarMarkerFill | undefined)[] | undefined;
+}
+
 interface MarkerWinner {
     color: number;
     priority: number;
     count: number;
+    kind: MarkerKind;
 }
 
 /**
@@ -123,50 +130,51 @@ export function getScrollBarMarkerCells(
         return { start, end: Math.min(rows, Math.max(marker.end, start + 1)) };
     });
 
+    // A cell is filled only under marks of its winner's kind (same colour and priority): a
+    // one-line change among occurrences of the word under the cursor stays a thin mark. Within a
+    // kind the spans are merged, so overlapping marks do not count a row twice, and one of them
+    // must itself run past a row: adjacent one-row marks (find matches) stay sparse.
+    const kinds = new Map<string, MarkerKind>();
+    const markerKinds = markers.map((marker, i) => {
+        const key = `${marker.priority}:${marker.color}`;
+        let kind = kinds.get(key);
+        if (kind === undefined) {
+            kind = { spans: [], fills: undefined };
+            kinds.set(key, kind);
+        }
+        kind.spans.push(spans[i]);
+        return kind;
+    });
+
     const winners = new Array<MarkerWinner | undefined>(trackHeight).fill(undefined);
     markers.forEach((marker, i) => {
         const span = spans[i];
         for (let cell = cellOf(span.start); cell <= cellOf(span.end - 1); cell++) {
             const prev = winners[cell];
             if (prev === undefined) {
-                winners[cell] = { color: marker.color, priority: marker.priority, count: 1 };
+                winners[cell] = { color: marker.color, priority: marker.priority, count: 1, kind: markerKinds[i] };
             } else {
                 if (marker.priority > prev.priority) {
                     prev.color = marker.color;
                     prev.priority = marker.priority;
+                    prev.kind = markerKinds[i];
                 }
                 prev.count++;
             }
         }
     });
 
-    // A cell is filled only under marks of its winner's kind (same colour and priority): a
-    // one-line change among occurrences of the word under the cursor stays a thin mark. Within a
-    // kind the spans are merged, so overlapping marks do not count a row twice, and one of them
-    // must itself run past a row: adjacent one-row marks (find matches) stay sparse.
-    const kindOf = (marker: { color: number; priority: number }): string => `${marker.priority}:${marker.color}`;
-    const kinds = new Map<string, { start: number; end: number }[]>();
-    markers.forEach((marker, i) => {
-        const key = kindOf(marker);
-        const list = kinds.get(key);
-        if (list === undefined) kinds.set(key, [spans[i]]);
-        else list.push(spans[i]);
-    });
-
-    const fillByKind = new Map<string, (ScrollBarMarkerFill | undefined)[]>();
-    const fillCells = (key: string): (ScrollBarMarkerFill | undefined)[] => {
-        const cached = fillByKind.get(key);
-        if (cached !== undefined) return cached;
+    const overlap = (start: number, end: number, from: number, to: number): number =>
+        Math.max(0, Math.min(end, to) - Math.max(start, from));
+    const computeFills = (kind: MarkerKind): (ScrollBarMarkerFill | undefined)[] => {
         const top = new Array<number>(trackHeight).fill(0);
         const bottom = new Array<number>(trackHeight).fill(0);
         const inRun = new Array<boolean>(trackHeight).fill(false);
-        const sorted = [...(kinds.get(key) ?? [])].sort((a, b) => a.start - b.start);
+        const sorted = [...kind.spans].sort((a, b) => a.start - b.start);
         for (const span of sorted) {
             if (span.end - span.start < 2) continue;
             for (let cell = cellOf(span.start); cell <= cellOf(span.end - 1); cell++) inRun[cell] = true;
         }
-        const overlap = (start: number, end: number, from: number, to: number): number =>
-            Math.max(0, Math.min(end, to) - Math.max(start, from));
         let i = 0;
         while (i < sorted.length) {
             const start = sorted[i].start;
@@ -179,7 +187,7 @@ export function getScrollBarMarkerCells(
                 bottom[cell] += overlap(start, end, mid, firstRowOf(cell + 1));
             }
         }
-        const fills = top.map((topRows, cell): ScrollBarMarkerFill | undefined => {
+        return top.map((topRows, cell): ScrollBarMarkerFill | undefined => {
             if (!inRun[cell]) return undefined;
             // A half counts as filled when the marks cover more than half of its rows.
             const quarter = (firstRowOf(cell + 1) - firstRowOf(cell)) / 4;
@@ -189,14 +197,18 @@ export function getScrollBarMarkerCells(
             if (topFilled) return "top";
             return bottomFilled ? "bottom" : undefined;
         });
-        fillByKind.set(key, fills);
-        return fills;
     };
 
     for (let cell = 0; cell < trackHeight; cell++) {
         const winner = winners[cell];
         if (winner === undefined) continue;
-        cells[cell] = { ...winner, fill: fillCells(kindOf(winner))[cell] };
+        winner.kind.fills ??= computeFills(winner.kind);
+        cells[cell] = {
+            color: winner.color,
+            priority: winner.priority,
+            count: winner.count,
+            fill: winner.kind.fills[cell],
+        };
     }
     return cells;
 }
