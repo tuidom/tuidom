@@ -94,7 +94,8 @@ export type ScrollBarMarkerFill = "full" | "top" | "bottom";
 
 /** Marks sharing a colour and priority, and (once a cell asks) the cells they fill. */
 interface MarkerKind {
-    readonly spans: { start: number; end: number }[];
+    /** Positions in the marker array, in marker order. */
+    readonly indices: number[];
     fills: (ScrollBarMarkerFill | undefined)[] | undefined;
 }
 
@@ -105,12 +106,41 @@ interface MarkerWinner {
     kind: MarkerKind;
 }
 
+interface MarkerLayout {
+    readonly trackHeight: number;
+    readonly contentHeight: number;
+    readonly cells: readonly (ScrollBarMarkerCell | undefined)[];
+}
+
+/**
+ * The last layout of each marker array. A scrollable hands out the same array while its marks
+ * do not change, so a frame that only scrolls or moves the caret pays nothing for them. Created
+ * on first use: the module's top level stays free of live objects (V8 snapshot).
+ */
+let layouts: WeakMap<readonly IScrollBarMarker[], MarkerLayout> | null = null;
+
 /**
  * Squeezes markers into track cells. Content row `r` lands in cell
  * `floor(r * trackHeight / max(contentHeight, trackHeight))`: short content keeps one row per
  * cell, long content shares a cell among several rows.
+ *
+ * The layout is computed once per marker array (and track) and reused for the same array: a
+ * scrollable must return a new array when its marks change, never mutate the one it gave out.
  */
 export function getScrollBarMarkerCells(
+    trackHeight: number,
+    contentHeight: number,
+    markers: readonly IScrollBarMarker[],
+): readonly (ScrollBarMarkerCell | undefined)[] {
+    layouts ??= new WeakMap();
+    const cached = layouts.get(markers);
+    if (cached?.trackHeight === trackHeight && cached.contentHeight === contentHeight) return cached.cells;
+    const cells = layoutScrollBarMarkers(trackHeight, contentHeight, markers);
+    layouts.set(markers, { trackHeight, contentHeight, cells });
+    return cells;
+}
+
+function layoutScrollBarMarkers(
     trackHeight: number,
     contentHeight: number,
     markers: readonly IScrollBarMarker[],
@@ -124,62 +154,86 @@ export function getScrollBarMarkerCells(
     const cellOf = (row: number): number => Math.floor((clampRow(row) * trackHeight) / rows);
     const firstRowOf = (cell: number): number => Math.ceil((cell * rows) / trackHeight);
 
-    // Spans clamped to the content, `end === start` widened to the single row it marks.
-    const spans = markers.map((marker) => {
-        const start = clampRow(marker.start);
-        return { start, end: Math.min(rows, Math.max(marker.end, start + 1)) };
-    });
-
+    // One pass over the marks: the span clamped to the content (`end === start` widened to the
+    // single row it marks), its kind, and the cells it wins. Typed arrays and no per-mark
+    // objects: a word with 200 K occurrences lays out on every caret move.
+    const count = markers.length;
+    const starts = new Float64Array(count);
+    const ends = new Float64Array(count);
     // A cell is filled only under marks of its winner's kind (same colour and priority): a
     // one-line change among occurrences of the word under the cursor stays a thin mark. Within a
     // kind the spans are merged, so overlapping marks do not count a row twice, and one of them
     // must itself run past a row: adjacent one-row marks (find matches) stay sparse.
-    const kinds = new Map<string, MarkerKind>();
-    const markerKinds = markers.map((marker, i) => {
-        const key = `${marker.priority}:${marker.color}`;
-        let kind = kinds.get(key);
-        if (kind === undefined) {
-            kind = { spans: [], fills: undefined };
-            kinds.set(key, kind);
-        }
-        kind.spans.push(spans[i]);
-        return kind;
-    });
-
+    const kindsByPriority = new Map<number, Map<number, MarkerKind>>();
     const winners = new Array<MarkerWinner | undefined>(trackHeight).fill(undefined);
-    markers.forEach((marker, i) => {
-        const span = spans[i];
-        for (let cell = cellOf(span.start); cell <= cellOf(span.end - 1); cell++) {
+    // Marks of one kind come in runs; only a change of kind looks it up.
+    let kind: MarkerKind | undefined;
+    let kindPriority = NaN;
+    let kindColor = NaN;
+    for (let i = 0; i < count; i++) {
+        const { priority, color } = markers[i];
+        const start = clampRow(markers[i].start);
+        const end = Math.min(rows, Math.max(markers[i].end, start + 1));
+        starts[i] = start;
+        ends[i] = end;
+        if (kind === undefined || priority !== kindPriority || color !== kindColor) {
+            let byColor = kindsByPriority.get(priority);
+            if (byColor === undefined) {
+                byColor = new Map();
+                kindsByPriority.set(priority, byColor);
+            }
+            kind = byColor.get(color);
+            if (kind === undefined) {
+                kind = { indices: [], fills: undefined };
+                byColor.set(color, kind);
+            }
+            kindPriority = priority;
+            kindColor = color;
+        }
+        kind.indices.push(i);
+        const last = cellOf(end - 1);
+        for (let cell = cellOf(start); cell <= last; cell++) {
             const prev = winners[cell];
             if (prev === undefined) {
-                winners[cell] = { color: marker.color, priority: marker.priority, count: 1, kind: markerKinds[i] };
+                winners[cell] = { color, priority, count: 1, kind };
             } else {
-                if (marker.priority > prev.priority) {
-                    prev.color = marker.color;
-                    prev.priority = marker.priority;
-                    prev.kind = markerKinds[i];
+                if (priority > prev.priority) {
+                    prev.color = color;
+                    prev.priority = priority;
+                    prev.kind = kind;
                 }
                 prev.count++;
             }
         }
-    });
+    }
 
     const overlap = (start: number, end: number, from: number, to: number): number =>
         Math.max(0, Math.min(end, to) - Math.max(start, from));
-    const computeFills = (kind: MarkerKind): (ScrollBarMarkerFill | undefined)[] => {
+    // The kind's marks in row order. Marks usually arrive sorted (occurrences, find matches), and
+    // then the order is the marker order; only an unsorted kind pays for a sort.
+    const inRowOrder = (indices: readonly number[]): readonly number[] => {
+        for (let k = 1; k < indices.length; k++) {
+            if (starts[indices[k]] < starts[indices[k - 1]]) {
+                return [...indices].sort((a, b) => starts[a] - starts[b]);
+            }
+        }
+        return indices;
+    };
+    const computeFills = (ofKind: MarkerKind): (ScrollBarMarkerFill | undefined)[] => {
         const top = new Array<number>(trackHeight).fill(0);
         const bottom = new Array<number>(trackHeight).fill(0);
         const inRun = new Array<boolean>(trackHeight).fill(false);
-        const sorted = [...kind.spans].sort((a, b) => a.start - b.start);
-        for (const span of sorted) {
-            if (span.end - span.start < 2) continue;
-            for (let cell = cellOf(span.start); cell <= cellOf(span.end - 1); cell++) inRun[cell] = true;
+        const sorted = inRowOrder(ofKind.indices);
+        for (const i of sorted) {
+            if (ends[i] - starts[i] < 2) continue;
+            const last = cellOf(ends[i] - 1);
+            for (let cell = cellOf(starts[i]); cell <= last; cell++) inRun[cell] = true;
         }
-        let i = 0;
-        while (i < sorted.length) {
-            const start = sorted[i].start;
-            let end = sorted[i].end;
-            for (i++; i < sorted.length && sorted[i].start <= end; i++) end = Math.max(end, sorted[i].end);
+        let k = 0;
+        while (k < sorted.length) {
+            const start = starts[sorted[k]];
+            let end = ends[sorted[k]];
+            for (k++; k < sorted.length && starts[sorted[k]] <= end; k++) end = Math.max(end, ends[sorted[k]]);
             for (let cell = cellOf(start); cell <= cellOf(end - 1); cell++) {
                 const from = firstRowOf(cell);
                 const mid = (from + firstRowOf(cell + 1)) / 2;

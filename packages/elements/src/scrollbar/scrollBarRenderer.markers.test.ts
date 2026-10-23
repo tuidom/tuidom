@@ -129,6 +129,34 @@ describe("getScrollBarMarkerCells", () => {
     it("returns no cells for an empty track", () => {
         expect(getScrollBarMarkerCells(0, 100, [marker(1, 2, 1)])).toEqual([]);
     });
+
+    it("orders the marks of a kind by row before joining them into a run", () => {
+        // The same three pieces as above, handed out of row order.
+        const cells = getScrollBarMarkerCells(10, 100, [marker(16, 20, 1), marker(10, 14, 1), marker(12, 16, 1)]);
+        expect(cells[1]?.fill).toBe("full");
+        expect(cells[1]?.count).toBe(3);
+    });
+
+    it("tells kinds apart by priority as well as by colour", () => {
+        // One colour, two priorities: the one-row mark is not part of the block's run.
+        const cells = getScrollBarMarkerCells(10, 100, [marker(0, 100, 7, 1), marker(15, 16, 7, 2)]);
+        expect(cells[1]).toEqual({ color: 7, priority: 2, count: 2, fill: undefined });
+        expect(cells[5]).toEqual({ color: 7, priority: 1, count: 1, fill: "full" });
+    });
+
+    it("lays out the same array once and reuses the cells", () => {
+        const markers = [marker(5, 6, 1), marker(15, 45, 2)];
+        const cells = getScrollBarMarkerCells(10, 100, markers);
+        expect(getScrollBarMarkerCells(10, 100, markers)).toBe(cells);
+        // A new array with the same marks is laid out again; a new track or content size too.
+        expect(getScrollBarMarkerCells(10, 100, [...markers])).not.toBe(cells);
+        expect(getScrollBarMarkerCells(10, 100, [...markers])).toEqual(cells);
+        expect(getScrollBarMarkerCells(20, 100, markers)).toHaveLength(20);
+        // Rows 40..49 of 100 are in the run; rows 80..99 of 200 are not.
+        expect(cells[4]).toBeDefined();
+        expect(getScrollBarMarkerCells(10, 200, markers)[4]).toBeUndefined();
+        expect(getScrollBarMarkerCells(10, 100, markers)).toEqual(cells);
+    });
 });
 
 describe("getScrollBarMarkerChar", () => {

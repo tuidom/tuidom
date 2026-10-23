@@ -170,7 +170,10 @@ of their own left of an untouched bar; `"auto"` picks outside from
 `markerColumnMinWidth` (80) columns up; `"none"` ignores them. A cell holding
 several marks shows the highest priority's colour and a density glyph
 (`─ ═ ≡`); rows covered by marks longer than one row fill solid, with
-half-block ends.
+half-block ends. The marks are laid out on the track once per array: return
+the same array while nothing changed (a frame that only scrolls then costs
+nothing for them) and a new one when something did — never mutate the array
+you handed out.
 
 ### Overlays (popups, dialogs)
 
