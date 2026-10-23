@@ -522,6 +522,18 @@ describe("tokenize", () => {
         expect(tokens[1]).toMatchObject({ kind: "device-report", report: "da1", params: "?62;1;6" });
     });
 
+    it("parses a color-scheme report (CSI ? 997 ; scheme n) as device-report", () => {
+        const tokens = tokenize("\x1b[?997;1n\x1b[?997;2n");
+        expect(tokens).toHaveLength(2);
+        expect(tokens[0]).toMatchObject({ kind: "device-report", report: "color-scheme", params: "?997;1" });
+        expect(tokens[1]).toMatchObject({ kind: "device-report", report: "color-scheme", params: "?997;2" });
+    });
+
+    it("leaves other private DSR replies (CSI ? … n) unrecognized", () => {
+        const tokens = tokenize("\x1b[?996n");
+        expect(tokens).toEqual([{ kind: "unknown-csi", raw: "\x1b[?996n" }]);
+    });
+
     it("still parses an ordinary Kitty CSI u key event (no private marker)", () => {
         // 's' = codepoint 115; ensure the device-report guard doesn't swallow real key events.
         const tokens = tokenize("\x1b[115u");

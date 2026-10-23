@@ -18,6 +18,9 @@ export const NO_HOST_COLORS: HostTerminalColors = Object.freeze({
     ansi: Object.freeze(new Array<undefined>(16).fill(undefined)),
 });
 
+/** The color scheme the host terminal reported ({@link ITerminalBackend.onColorSchemeChange}). */
+export type HostColorScheme = "dark" | "light";
+
 /**
  * Unified abstraction over terminal I/O.
  *
@@ -70,6 +73,18 @@ export interface ITerminalBackend {
      * outer terminal (tmux ≥ 3.4 for fg/bg, ≥ 3.6 for the palette). Fire-and-forget.
      */
     probeHostColors(onResult: (colors: HostTerminalColors) => void): void;
+
+    /**
+     * Subscribe to the terminal's color-scheme reports (DEC private mode 2031, the
+     * Contour protocol: Ghostty, kitty, Contour, tmux ≥ 3.6). The first subscription
+     * turns the mode on and asks for the current scheme (`CSI ? 996 n`); the terminal
+     * answers `CSI ? 997 ; 1 n` (dark) or `CSI ? 997 ; 2 n` (light), and repeats the
+     * report unasked whenever its scheme flips — e.g. when the OS switches appearance.
+     * `callback` fires for every report, the answer to the query included. A terminal
+     * without the protocol stays silent, so the callback never fires. Reports are
+     * consumed by the backend and never reach `onInput`.
+     */
+    onColorSchemeChange(callback: (scheme: HostColorScheme) => void): void;
 
     /**
      * Render a frame: receive the current grid and cursor position.

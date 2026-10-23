@@ -140,6 +140,8 @@ export interface OscToken {
  *  - "kitty-flags": reply to the Kitty keyboard-protocol query `CSI ? u` → `CSI ? <flags> u`.
  *  - "da1":         reply to Primary Device Attributes `CSI c` → `CSI ? <attrs> c`.
  *  - "xtversion":   reply to XTVERSION `CSI > 0 q` → `DCS > | <name(version)> ST`.
+ *  - "color-scheme": color-scheme report `CSI ? 997 ; <1 dark | 2 light> n` — the reply
+ *                    to `CSI ? 996 n` and, with mode 2031 on, an unasked report on change.
  * The CSI replies begin with the private marker `?`, which never appears in a real key
  * event; the XTVERSION reply is a DCS string (`ESC P > |`), not a key either.
  */
@@ -154,7 +156,7 @@ export interface DeviceReportToken {
     readonly raw: string;
 }
 
-export type DeviceReportKind = "kitty-flags" | "da1" | "xtversion";
+export type DeviceReportKind = "kitty-flags" | "da1" | "xtversion" | "color-scheme";
 
 // ─── Mouse tokens ───
 

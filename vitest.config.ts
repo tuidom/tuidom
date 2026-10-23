@@ -18,7 +18,7 @@ export default defineConfig({
                 // недостающие тесты.
                 statements: 99.54,
                 branches: 99.71,
-                functions: 98.87,
+                functions: 98.88,
                 lines: 99.6,
             },
             reporter: ["text", "lcov", "json", "json-summary", "text-summary"],

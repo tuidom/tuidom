@@ -577,6 +577,11 @@ export function parseCSI(data: string, start: number): CSITokenResult | null {
         };
         return { token, nextIndex };
     }
+    // CSI ? 997 ; <scheme> n → color-scheme report (mode 2031); `n` with `?` is never a key either.
+    if (finalByte === "n" && paramStrings[0] === "?997") {
+        const token: DeviceReportToken = { kind: "device-report", report: "color-scheme", params, raw };
+        return { token, nextIndex };
+    }
 
     // ── Kitty Keyboard Protocol: CSI <codepoint[:shifted[:base]]> ; <mod[:eventtype]> [; <text>] u ──
     if (finalByte === "u") {
