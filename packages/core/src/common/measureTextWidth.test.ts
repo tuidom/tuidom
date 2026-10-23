@@ -21,6 +21,17 @@ const PARITY_CASES: [string, string][] = [
     ["emoji ZWJ family", "👨‍👩‍👧 family"],
     ["vs16 heart", "love ❤️ it"],
     ["combining marks", "é́ café"],
+    // The ASCII fast path hands its last code unit back to the generic path: these join it to what follows.
+    ["ascii then combining mark", "cafe\u0301 au lait"],
+    ["ascii then ZWJ sequence", "ok\u200d\ud83d\ude00 done"],
+    ["ascii then VS16", "a\ufe0f b"],
+    ["tab then combining mark", "\t\u0301x"],
+    ["tabs then cjk", "\t\t\u65e5\u672c"],
+    ["cyrillic after ascii", "let \u0438\u043c\u044f = 1;"],
+    ["non-ascii first", "\u65e5\u672c then ascii"],
+    ["control char", "a\u0007b"],
+    ["del", "a\u007fb"],
+    ["tab after the break", "x \u65e5\tb"],
 ];
 
 describe("measureTextWidth — parity with DisplayLine.displayWidth", () => {
