@@ -1,4 +1,9 @@
-import { type HostTerminalColors, type ITerminalBackend, NO_HOST_COLORS } from "@tuidom/core/backend/iTerminalBackend";
+import {
+    type HostColorScheme,
+    type HostTerminalColors,
+    type ITerminalBackend,
+    NO_HOST_COLORS,
+} from "@tuidom/core/backend/iTerminalBackend";
 import { DEFAULT_COLOR } from "@tuidom/core/common/colorUtils";
 import { Point, Size } from "@tuidom/core/common/geometryPromitives";
 import type { KeyPressEvent } from "@tuidom/core/input/keyEvent";
@@ -94,6 +99,27 @@ export class MockTerminalBackend implements ITerminalBackend {
     /** Answers synchronously with {@link hostColors} — no terminal round-trip to wait for. */
     public probeHostColors(onResult: (colors: HostTerminalColors) => void): void {
         onResult(this.hostColors);
+    }
+
+    private readonly colorSchemeCallbacks: ((scheme: HostColorScheme) => void)[] = [];
+
+    /**
+     * The scheme {@link onColorSchemeChange} reports on subscription, as a terminal answers
+     * `CSI ? 996 n`. `undefined` (default) = a terminal without the protocol, nothing fires.
+     * Set it before the app subscribes; a later flip goes through {@link sendColorScheme}.
+     */
+    public colorScheme: HostColorScheme | undefined = undefined;
+
+    /** Answers synchronously with {@link colorScheme}, if set — no terminal round-trip to wait for. */
+    public onColorSchemeChange(callback: (scheme: HostColorScheme) => void): void {
+        this.colorSchemeCallbacks.push(callback);
+        if (this.colorScheme !== undefined) callback(this.colorScheme);
+    }
+
+    /** Simulate the terminal's unasked report that its scheme flipped (the OS switched appearance). */
+    public sendColorScheme(scheme: HostColorScheme): void {
+        this.colorScheme = scheme;
+        for (const cb of this.colorSchemeCallbacks) cb(scheme);
     }
 
     public cursorPosition: Point = new Point(0, 0);

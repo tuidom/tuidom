@@ -189,4 +189,21 @@ describe("HeadlessCaptureBackend", () => {
         backend.probeHostColors(onResult);
         expect(onResult).toHaveBeenLastCalledWith(colors);
     });
+
+    it("onColorSchemeChange молчит без colorScheme; задан — отвечает сразу, sendColorScheme шлёт смену всем", () => {
+        const backend = new HeadlessCaptureBackend();
+        const silent = vi.fn();
+        backend.onColorSchemeChange(silent);
+        expect(silent).not.toHaveBeenCalled();
+
+        backend.colorScheme = "dark";
+        const answered = vi.fn();
+        backend.onColorSchemeChange(answered);
+        expect(answered).toHaveBeenCalledExactlyOnceWith("dark");
+
+        backend.sendColorScheme("light");
+        expect(silent).toHaveBeenCalledExactlyOnceWith("light");
+        expect(answered).toHaveBeenLastCalledWith("light");
+        expect(backend.colorScheme).toBe("light");
+    });
 });

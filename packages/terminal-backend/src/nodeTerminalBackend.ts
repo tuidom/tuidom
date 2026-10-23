@@ -1,4 +1,4 @@
-import type { HostTerminalColors, ITerminalBackend } from "@tuidom/core/backend/iTerminalBackend";
+import type { HostColorScheme, HostTerminalColors, ITerminalBackend } from "@tuidom/core/backend/iTerminalBackend";
 import { parseXColor } from "@tuidom/core/common/colorUtils";
 import { Point, Size } from "@tuidom/core/common/geometryPromitives";
 import type { KeyPressEvent } from "@tuidom/core/input/keyEvent";
@@ -54,6 +54,23 @@ const BRACKETED_PASTE_DISABLE = "\x1b[?2004l";
  */
 const TITLE_PUSH = "\x1b[22;0t";
 const TITLE_POP = "\x1b[23;0t";
+
+/**
+ * Color-scheme reports (DEC private mode 2031, the Contour protocol): with the mode on the
+ * terminal sends `CSI ? 997 ; 1|2 n` whenever its scheme flips; `CSI ? 996 n` asks for the
+ * current one right away. Direct, per-pane: tmux ≥ 3.6 tracks the mode itself and reports
+ * the outer terminal's scheme to the panes that asked.
+ */
+const COLOR_SCHEME_REPORTS_ENABLE = "\x1b[?2031h";
+const COLOR_SCHEME_REPORTS_DISABLE = "\x1b[?2031l";
+const COLOR_SCHEME_QUERY = "\x1b[?996n";
+
+/** `?997;1` → dark, `?997;2` → light; any other value isn't a scheme we know. */
+function parseColorSchemeReport(params: string): HostColorScheme | undefined {
+    if (params === "?997;1") return "dark";
+    if (params === "?997;2") return "light";
+    return undefined;
+}
 
 /** OSC 0 — icon name and window title at once; BEL is the terminator everyone understands. */
 export function windowTitleSequence(title: string): string {
@@ -158,6 +175,9 @@ export class NodeTerminalBackend implements ITerminalBackend {
     private resizeCallbacks: ((size: Size) => void)[] = [];
     private oscResponseCallbacks: ((code: number, data: string) => void)[] = [];
     private deviceReportCallbacks: ((report: DeviceReportKind, params: string) => void)[] = [];
+    private colorSchemeCallbacks: ((scheme: HostColorScheme) => void)[] = [];
+    /** Mode 2031 is on — teardown owes the terminal its reset. */
+    private colorSchemeReportsOn = false;
     /** DA1-запросов отправлено / ответов получено — чтобы проба ждала именно свой DA1. */
     private da1Sent = 0;
     private da1Received = 0;
@@ -264,6 +284,18 @@ export class NodeTerminalBackend implements ITerminalBackend {
 
     public onOscResponse(callback: (code: number, data: string) => void): void {
         this.oscResponseCallbacks.push(callback);
+    }
+
+    public onColorSchemeChange(callback: (scheme: HostColorScheme) => void): void {
+        this.colorSchemeCallbacks.push(callback);
+        // Before setup the tty is still in cooked mode with ECHO: the reply would land on the screen.
+        if (this.onDataHandler !== null) this.enableColorSchemeReports();
+    }
+
+    private enableColorSchemeReports(): void {
+        if (this.colorSchemeReportsOn) return;
+        this.colorSchemeReportsOn = true;
+        this.writeDirect(COLOR_SCHEME_REPORTS_ENABLE + COLOR_SCHEME_QUERY);
     }
 
     public probeKeyboardProtocol(onResult: (supported: boolean) => void): void {
@@ -381,6 +413,10 @@ export class NodeTerminalBackend implements ITerminalBackend {
         }
         for (const report of result.deviceReports) {
             if (report.report === "da1") this.da1Received++;
+            if (report.report === "color-scheme") {
+                const scheme = parseColorSchemeReport(report.params);
+                if (scheme !== undefined) for (const cb of this.colorSchemeCallbacks) cb(scheme);
+            }
             for (const cb of this.deviceReportCallbacks) cb(report.report, report.params);
         }
     }
@@ -494,6 +530,8 @@ export class NodeTerminalBackend implements ITerminalBackend {
             this.schedulePartialInputFlush();
         };
         this.stdin.on("data", this.onDataHandler);
+        // A subscriber from before setup gets its reports now that the tty is raw.
+        if (this.colorSchemeCallbacks.length > 0) this.enableColorSchemeReports();
 
         // Listen for terminal resize (throttled + deduplicated)
         this.onResizeHandler = () => {
@@ -542,6 +580,10 @@ export class NodeTerminalBackend implements ITerminalBackend {
         this.writeDirect(MOUSE_TRACKING_DISABLE);
         // Disable bracketed paste — direct (matches the per-pane enable in setup)
         this.writeDirect(BRACKETED_PASTE_DISABLE);
+        if (this.colorSchemeReportsOn) {
+            this.writeDirect(COLOR_SCHEME_REPORTS_DISABLE);
+            this.colorSchemeReportsOn = false;
+        }
         // Restore cursor
         this.stdout.write("\x1b[?25h");
         // Restore normal screen buffer
