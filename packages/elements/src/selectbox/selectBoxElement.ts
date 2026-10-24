@@ -47,6 +47,9 @@ export class SelectBoxElement extends TUIElement {
         this.addEventListener("mousedown", (event) => {
             if (event.button !== "left") return;
             this.toggleOpen();
+            // Фокус клика остаётся у раскрытого списка: иначе действие по умолчанию увело бы его на сам
+            // контрол — клавиши не дошли бы до списка, а restoreFocus не вернул бы его на место после выбора.
+            event.preventDefault();
         });
     }
 
