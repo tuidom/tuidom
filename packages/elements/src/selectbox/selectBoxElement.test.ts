@@ -6,6 +6,9 @@ import { renderElement } from "@tuidom/testing/renderElement";
 import { TestApp } from "@tuidom/testing/TestApp";
 import { describe, expect, it } from "vitest";
 
+import { InputElement } from "../inputbox/inputElement.ts";
+import { VStackElement } from "../layout/vStackElement.ts";
+
 import type { ISelectData } from "./selectBoxElement.ts";
 import { SelectBoxElement } from "./selectBoxElement.ts";
 
@@ -264,5 +267,27 @@ describe("SelectBoxElement: выбор", () => {
         );
 
         expect(select.isOpen()).toBe(true);
+    });
+
+    it("клик оставляет фокус в списке, а выбор возвращает его туда, где он был до клика", () => {
+        const input = new InputElement();
+        const select = new SelectBoxElement();
+        select.setOptions([{ text: "a" }, { text: "b" }], 0);
+        const stack = new VStackElement();
+        stack.addChild(input, { width: "stretch", height: 1 });
+        stack.addChild(select, { width: "stretch", height: 1 });
+        const app = TestApp.createWithContent(stack, new Size(60, 20));
+        app.render();
+        input.focus();
+
+        select.dispatchEvent(
+            new TUIMouseEvent("mousedown", { button: "left", screenX: 0, screenY: 1, localX: 0, localY: 0 }),
+        );
+        expect(app.focusedElement).not.toBe(select);
+
+        app.sendKey("ArrowDown");
+        app.sendKey("Enter");
+        expect(select.getSelected()).toBe(1);
+        expect(app.focusedElement).toBe(input);
     });
 });
