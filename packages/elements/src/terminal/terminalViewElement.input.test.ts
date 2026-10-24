@@ -35,6 +35,14 @@ describe("TerminalViewElement — keyboard", () => {
         expect(surface.writes).toEqual([]);
         expect(event.defaultPrevented).toBe(false);
     });
+
+    it.each(["E", "e"])("leaves Ctrl+Shift+%s to the host: no PTY write, no preventDefault", (key) => {
+        const { el, surface } = makeElement();
+        const event = new TUIKeyboardEvent("keydown", { key, ctrlKey: true, shiftKey: true });
+        el.dispatchEvent(event);
+        expect(surface.writes).toEqual([]);
+        expect(event.defaultPrevented).toBe(false);
+    });
 });
 
 describe("TerminalViewElement — paste", () => {
