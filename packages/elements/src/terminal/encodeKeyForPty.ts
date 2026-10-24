@@ -32,10 +32,12 @@ export function encodeKeyForPty(event: TUIKeyboardEvent): string {
     const { key } = event;
 
     // Ctrl+буква → управляющий байт 0x01..0x1a (Ctrl+A=1 … Ctrl+Z=26).
+    // Ctrl+Shift+буква не транслируем, как xterm.js (`evaluateKeyboardEvent` выдаёт байт
+    // только при `ctrlKey && !shiftKey`): сочетание остаётся хосту — Ctrl+Shift+E/F/G/P.
     if (event.ctrlKey && key.length === 1) {
         const lower = key.toLowerCase();
         if (lower >= "a" && lower <= "z") {
-            return String.fromCharCode(lower.charCodeAt(0) - 96);
+            return event.shiftKey ? "" : String.fromCharCode(lower.charCodeAt(0) - 96);
         }
         // Немного распространённых Ctrl-символов.
         switch (key) {

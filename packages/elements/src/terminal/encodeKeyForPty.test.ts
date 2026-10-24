@@ -71,6 +71,21 @@ describe("encodeKeyForPty", () => {
         expect(encode(key, { ctrlKey: true })).toBe(expected);
     });
 
+    const LETTERS = Array.from({ length: 26 }, (_, i) => String.fromCharCode(97 + i));
+
+    it.each(LETTERS.map((letter, i) => [letter, String.fromCharCode(i + 1)]))(
+        "encodes every Ctrl+%s without Shift to its control byte",
+        (letter, expected) => {
+            expect(encode(letter, { ctrlKey: true })).toBe(expected);
+            expect(encode(letter.toUpperCase(), { ctrlKey: true })).toBe(expected);
+        },
+    );
+
+    it.each(LETTERS)('returns "" for Ctrl+Shift+%s, leaving it to the host like xterm.js', (letter) => {
+        expect(encode(letter, { ctrlKey: true, shiftKey: true })).toBe("");
+        expect(encode(letter.toUpperCase(), { ctrlKey: true, shiftKey: true })).toBe("");
+    });
+
     it("prefixes Alt-modified printables with ESC (meta byte)", () => {
         expect(encode("a", { altKey: true })).toBe("\x1ba");
     });
