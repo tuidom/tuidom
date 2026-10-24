@@ -29,6 +29,10 @@ export type PointerPolicy = "close-on-outside" | "modal" | "passthrough";
 
 export interface OverlaySessionOptions {
     visible?: boolean;
+    /**
+     * При закрытии вернуть фокус туда, где он был при открытии. Только если фокус в этот момент внутри сессии
+     * или его нет: ушедший наружу фокус (переключили вкладку, кликнули мимо) остаётся где есть.
+     */
     restoreFocus?: boolean;
     focusOnOpen?: boolean;
     closeOnEscape?: boolean;
@@ -365,13 +369,18 @@ export class OverlayLayer extends TUIElement {
         const root = this.getRoot();
         const focusManager = root?.focusManager ?? null;
 
+        // Фокус возвращается, только если он всё ещё у сессии (или его нет): если пока сессия была открыта
+        // его осознанно увели наружу (переключили вкладку, кликнули мимо), возврат утащил бы его обратно.
+        const active = focusManager?.activeElement ?? null;
+        const focusInside = active === null || active.getAncestorPath().includes(session.element);
+
         session.visible = false;
         this.setVisible(session.element, false);
         this.cleanupSessionListeners(session);
         this.releaseFocusScope(session);
 
         if (session.options.restoreFocus && session.savedFocus) {
-            focusManager?.setFocus(session.savedFocus);
+            if (focusInside) focusManager?.setFocus(session.savedFocus);
             session.savedFocus = null;
         }
 

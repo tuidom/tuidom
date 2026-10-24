@@ -5,6 +5,7 @@ import { TestApp } from "@tuidom/testing/TestApp";
 import { describe, expect, it } from "vitest";
 
 import { InputElement } from "../inputbox/inputElement.ts";
+import { VStackElement } from "../layout/vStackElement.ts";
 import { PopupMenuElement } from "../menu/popupMenuElement.ts";
 
 describe("OverlayLayer session API", () => {
@@ -50,6 +51,54 @@ describe("OverlayLayer session API", () => {
 
         session.open();
         expect(app.focusedElement).toBe(menu);
+
+        session.close();
+        expect(app.focusedElement).toBe(input);
+    });
+
+    it("restoreFocus does not pull back focus that moved outside the session while it was open", () => {
+        const first = new InputElement();
+        const second = new InputElement();
+        const stack = new VStackElement();
+        stack.addChild(first, { width: "stretch", height: 1 });
+        stack.addChild(second, { width: "stretch", height: 1 });
+        const app = TestApp.createWithContent(stack, new Size(30, 10));
+        first.focus();
+
+        const menu = new PopupMenuElement([{ label: "Copy" }]);
+        menu.focusable = true;
+        const session = app.root.overlayLayer.createSession(menu, new Point(1, 1), {
+            visible: false,
+            restoreFocus: true,
+            focusOnOpen: true,
+            pointerPolicy: "passthrough",
+        });
+
+        session.open();
+        expect(app.focusedElement).toBe(menu);
+        second.focus();
+
+        session.close();
+        expect(app.focusedElement).toBe(second);
+    });
+
+    it("restoreFocus restores when nothing has focus at close", () => {
+        const input = new InputElement();
+        const app = TestApp.createWithContent(input, new Size(30, 10));
+        input.focus();
+
+        const menu = new PopupMenuElement([{ label: "Copy" }]);
+        menu.focusable = true;
+        const session = app.root.overlayLayer.createSession(menu, new Point(1, 1), {
+            visible: false,
+            restoreFocus: true,
+            focusOnOpen: true,
+            pointerPolicy: "passthrough",
+        });
+
+        session.open();
+        app.root.focusManager!.setFocus(null);
+        expect(app.focusedElement).toBeNull();
 
         session.close();
         expect(app.focusedElement).toBe(input);
