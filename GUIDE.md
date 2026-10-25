@@ -397,7 +397,7 @@ will be generated from source — see `docs/TODO/ApiReferenceGeneration.md`.
 | `TextLabelElement` | single-line label, per-char styling (`setCharStyle`) |
 | `TextBlockElement` | multi-line word-wrapped text, scrollable content |
 | **Controls** | |
-| `ButtonElement` | push button |
+| `ButtonElement` | push button; `{ wrap: true }` wraps a label wider than the box by words |
 | `InputElement` | single-line text input; `maskChar` renders every grapheme as that glyph (password field) |
 | `SelectBoxElement` | dropdown select |
 | `CompletionListElement` / `CompletionWidgetElement` / `CompletionDetailsElement` | completion popup family |
