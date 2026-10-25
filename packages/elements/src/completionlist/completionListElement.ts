@@ -5,7 +5,7 @@ import { BORDER_THICKNESS } from "@tuidom/core/dom/borderStyle";
 import type { TUIMouseEvent } from "@tuidom/core/dom/events/tuiMouseEvent";
 import { RenderContext, TUIElement } from "@tuidom/core/dom/tuiElement";
 
-import { kindIcon } from "./completionItemKindIcon.ts";
+import { kindGlyphToken } from "./completionItemKindIcon.ts";
 
 // ─── Styles ──────────────────────────────────────────────────────────────────
 
@@ -249,7 +249,7 @@ export class CompletionListElement extends TUIElement {
         for (let x = 1; x < w - 1; x++) context.setCell(x, rowY, { char: " ", fg: rowFg, bg: rowBg });
 
         // Иконка типа
-        const icon = kindIcon(item.kind);
+        const icon = this.glyph(kindGlyphToken(item.kind));
         context.drawText(2, rowY, icon, {
             fg: isSelected ? rowFg : this.styleVar("editorSuggestWidget.iconForeground"),
             bg: rowBg,
