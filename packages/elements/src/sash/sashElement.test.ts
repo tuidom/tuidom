@@ -169,6 +169,55 @@ describe("SashElement", () => {
         expect(renderTopChar(sash)).toBe(" ");
     });
 
+    it("waits 300 ms by default", () => {
+        expect(new SashElement().hoverDelay).toBe(300);
+    });
+
+    it("lights the line in the same frame as the mouseenter when hoverDelay is 0", () => {
+        vi.useFakeTimers();
+        const { root, sash } = buildScene();
+        sash.hoverDelay = 0;
+        const dispatcher = new MouseEventDispatcher();
+
+        dispatcher.handleMouseToken(makeToken({ action: "move", x: 31, y: 1 }), root);
+        // No timer advance — the line is up right after the event.
+        expect(renderTopChar(sash)).toBe("│");
+
+        dispatcher.handleMouseToken(makeToken({ action: "move", x: 50, y: 1 }), root);
+        expect(renderTopChar(sash)).toBe(" ");
+    });
+
+    it("waits exactly the configured hoverDelay", () => {
+        vi.useFakeTimers();
+        const { root, sash } = buildScene();
+        sash.hoverDelay = 1000;
+        const dispatcher = new MouseEventDispatcher();
+
+        dispatcher.handleMouseToken(makeToken({ action: "move", x: 31, y: 1 }), root);
+        vi.advanceTimersByTime(999);
+        expect(renderTopChar(sash)).toBe(" ");
+        vi.advanceTimersByTime(1);
+        expect(renderTopChar(sash)).toBe("│");
+    });
+
+    it("applies a changed hoverDelay from the next mouseenter, not to the pending show", () => {
+        vi.useFakeTimers();
+        const { root, sash } = buildScene();
+        const dispatcher = new MouseEventDispatcher();
+
+        dispatcher.handleMouseToken(makeToken({ action: "move", x: 31, y: 1 }), root);
+        sash.hoverDelay = 0;
+        // The pending show keeps its 300 ms.
+        expect(renderTopChar(sash)).toBe(" ");
+        vi.advanceTimersByTime(300);
+        expect(renderTopChar(sash)).toBe("│");
+
+        // Leave and come back — now the new delay (0) applies.
+        dispatcher.handleMouseToken(makeToken({ action: "move", x: 50, y: 1 }), root);
+        dispatcher.handleMouseToken(makeToken({ action: "move", x: 31, y: 1 }), root);
+        expect(renderTopChar(sash)).toBe("│");
+    });
+
     describe("horizontal orientation", () => {
         /** A horizontal sash at screenY=10 spanning an 80-wide root, with a drag log. */
         function buildHScene(): { root: ContainerElement; sash: SashElement; drags: number[] } {

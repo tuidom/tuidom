@@ -1,9 +1,6 @@
 import type { RenderContext } from "@tuidom/core/dom/tuiElement";
 import { TUIElement } from "@tuidom/core/dom/tuiElement";
 
-/** How long the cursor must linger on the sash before the hover line lights up. */
-const HOVER_DELAY_MS = 300;
-
 /**
  * Orientation of a {@link SashElement}: a `"vertical"` sash is a column that
  * resizes horizontally (reports screenX); a `"horizontal"` sash is a row that
@@ -20,12 +17,18 @@ export type SashOrientation = "vertical" | "horizontal";
  * via {@link onDrag} — screenX for a vertical sash, screenY for a horizontal one; the
  * owner clamps and applies the new size.
  *
- * It is invisible at rest. On hover — after a short delay so a passing cursor does not
- * flash it — it paints a thin line along the boundary so the user can tell it is
+ * It is invisible at rest. On hover — after {@link hoverDelay} so a passing cursor does
+ * not flash it — it paints a thin line along the boundary so the user can tell it is
  * draggable. The line also stays lit for the duration of a drag.
  */
 export class SashElement extends TUIElement {
     public onDrag?: (boundaryScreen: number) => void;
+    /**
+     * How long (ms) the cursor must linger on the sash before the hover line lights up;
+     * `0` lights it in the same frame as the `mouseenter`. A change applies from the next
+     * `mouseenter` — a show already pending keeps its delay, like vscode's sash.
+     */
+    public hoverDelay = 300;
 
     private readonly orientation: SashOrientation;
     private dragging = false;
@@ -55,10 +58,14 @@ export class SashElement extends TUIElement {
         // кастомным состоянием "lit".
         this.addEventListener("mouseenter", () => {
             this.clearHoverTimer();
+            if (this.hoverDelay <= 0) {
+                this.setStyleState("lit", true);
+                return;
+            }
             this.hoverTimer = setTimeout(() => {
                 this.hoverTimer = null;
                 this.setStyleState("lit", true);
-            }, HOVER_DELAY_MS);
+            }, this.hoverDelay);
         });
         this.addEventListener("mouseleave", () => {
             this.clearHoverTimer();
