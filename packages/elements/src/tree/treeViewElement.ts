@@ -41,6 +41,12 @@ function rowDescription(item: ITreeItem): string | null {
     return item.description !== undefined && item.description !== "" ? item.description : null;
 }
 
+/** Колонки бейджа и стрелки симлинка у правого края строки с пробелом перед ними; 0 — их нет. */
+function rightBadgesWidth(item: ITreeItem): number {
+    const width = (item.badge ? Array.from(item.badge).length : 0) + (item.symlink ? 1 : 0);
+    return width === 0 ? 0 : width + 1;
+}
+
 /** Текст inline-действия: глиф, а без него — заголовок. */
 function actionText(action: ITreeItemAction): string {
     return action.icon ?? action.label;
@@ -695,12 +701,15 @@ export class TreeViewElement<T> extends ScrollableElement {
             this.flatNodes.push({ element, depth, item, parentKey, labelWidth });
             const description = rowDescription(item);
             // indent + expandIcon + space + icon + space + label [+ space + description]
+            // [+ space + symlink + badge]: бейджи прижаты к краю viewport'а поверх
+            // строки, и без резерва на предельной прокрутке закрыли бы конец текста.
             const rowWidth =
                 this.rowIndentX(depth) +
                 2 +
                 (item.icon ? 2 : 0) +
                 labelWidth +
-                (description === null ? 0 : 1 + this.textWidth(description, previousWidths, labelWidths));
+                (description === null ? 0 : 1 + this.textWidth(description, previousWidths, labelWidths)) +
+                rightBadgesWidth(item);
             if (rowWidth > this.maxRowWidth) {
                 this.maxRowWidth = rowWidth;
             }

@@ -15,6 +15,7 @@ interface TestNode {
     description?: string;
     segments?: string[];
     badge?: string;
+    symlink?: boolean;
     labelColor?: number;
     children?: TestNode[];
 }
@@ -27,6 +28,7 @@ function createProvider(roots: TestNode[]): ITreeDataProvider<TestNode> {
                 description: element.description,
                 labelSegments: element.segments,
                 badge: element.badge,
+                symlink: element.symlink,
                 labelColor: element.labelColor,
                 collapsible: (element.children?.length ?? 0) > 0,
             };
@@ -136,6 +138,23 @@ describe("TreeViewElement - description", () => {
             await createTree([{ id: "a", label: "Alpha", description: "0123456789", badge: "M" }], 14),
         );
         expect(row(screen, 0)).toBe("  Alpha 01234M");
+    });
+
+    it("reserves room for the badge in contentWidth, so the text end scrolls clear of it", async () => {
+        const described = await createTree([{ id: "a", label: "Alpha", description: "0123456789", badge: "M" }], 14);
+        // "  Alpha 0123456789" = 18, пробел и бейдж — ещё 2.
+        expect(described.contentWidth).toBe(20);
+        described.scrollTo(1000, 0);
+        expect(row(render(described), 0)).toBe("a 0123456789 M");
+
+        const labelOnly = await createTree([{ id: "a", label: "Alpha-0123456789", badge: "MU" }], 14);
+        labelOnly.scrollTo(1000, 0);
+        expect(row(render(labelOnly), 0)).toBe("-0123456789 MU");
+
+        // Стрелка симлинка — тоже колонка резерва; без бейджей резерва нет.
+        const symlink = await createTree([{ id: "a", label: "Alpha", symlink: true }]);
+        expect(symlink.contentWidth).toBe(9);
+        expect((await createTree([{ id: "a", label: "Alpha" }])).contentWidth).toBe(7);
     });
 
     it("puts the description after the last segment of a compact row", async () => {
