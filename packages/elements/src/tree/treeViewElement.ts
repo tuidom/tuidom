@@ -8,7 +8,7 @@ import type { RenderContext } from "@tuidom/core/dom/tuiElement";
 
 import { ScrollableElement, type ScrollViewportInfo } from "../scrollbar/scrollableElement.ts";
 
-import type { ITreeDataProvider, ITreeItem } from "./iTreeDataProvider.ts";
+import type { ITreeDataProvider, ITreeItem, ITreeItemAction } from "./iTreeDataProvider.ts";
 
 const INDENT_SIZE = 2;
 // Окно, в течение которого напечатанные символы складываются в одну последовательность
@@ -36,6 +36,16 @@ function rowLabel(item: ITreeItem): string {
     return compactSegments(item)?.join(SEGMENT_SEPARATOR) ?? item.label;
 }
 
+/** Описание строки ({@link ITreeItem.description}), либо null, если его нет или оно пустое. */
+function rowDescription(item: ITreeItem): string | null {
+    return item.description !== undefined && item.description !== "" ? item.description : null;
+}
+
+/** Текст inline-действия: глиф, а без него — заголовок. */
+function actionText(action: ITreeItemAction): string {
+    return action.icon ?? action.label;
+}
+
 /**
  * Как открыть строку — `IOpenEvent.editorOptions` эталона (`ResourceNavigator`):
  * одиночный клик — превью, фокус остаётся в дереве; двойной клик и Enter —
@@ -52,11 +62,27 @@ const OPEN_PREVIEW: TreeActivateOptions = { pinned: false, preserveFocus: true }
 const OPEN_PINNED: TreeActivateOptions = { pinned: true, preserveFocus: false };
 const OPEN_PINNED_IN_BACKGROUND: TreeActivateOptions = { pinned: true, preserveFocus: true };
 
+/** Глиф inline-действия в строке: колонки viewport'а `[start, end)`, номер действия и текст. */
+interface InlineActionSpan {
+    readonly start: number;
+    readonly end: number;
+    readonly index: number;
+    readonly text: DisplayLine;
+}
+
+interface InlineActionsLayout {
+    readonly start: number;
+    readonly end: number;
+    readonly spans: readonly InlineActionSpan[];
+}
+
 interface FlatTreeNode<T> {
     element: T;
     depth: number;
     item: ITreeItem;
     parentKey: string | null;
+    /** Ширина метки в колонках: описание начинается через пробел после неё. */
+    labelWidth: number;
 }
 
 export class TreeViewElement<T> extends ScrollableElement {
@@ -92,6 +118,8 @@ export class TreeViewElement<T> extends ScrollableElement {
     private segmentStates = new Map<string, SegmentState>();
     /** Сегмент под мышью на {@link hoveredIndex} (подчёркивается, как `:hover` у эталона). */
     private hoveredSegment: number | null = null;
+    /** Inline-действие под мышью на {@link hoveredIndex} (подсвечено фоном, как `:hover` кнопки у эталона). */
+    private hoveredAction: number | null = null;
     private typeaheadBuffer = "";
     private typeaheadTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -102,6 +130,11 @@ export class TreeViewElement<T> extends ScrollableElement {
     public onContextMenu: ((element: T, screenX: number, screenY: number) => void) | null = null;
     /** Сменился текущий сегмент компактной строки (Left/Right, клик, API). */
     public onSegmentChanged: ((element: T, index: number) => void) | null = null;
+    /**
+     * Клик по inline-действию строки ({@link ITreeItem.actions}): `index` — номер
+     * действия. Курсор переходит на строку, узел не переключается и не открывается.
+     */
+    public onInlineAction: ((element: T, index: number) => void) | null = null;
     /**
      * Раскрывать узел только шевроном — `expandOnlyOnTwistieClick` дерева
      * эталона. `true` (по умолчанию): клик по имени лишь выделяет, узел
@@ -394,10 +427,14 @@ export class TreeViewElement<T> extends ScrollableElement {
             const rowIconColor = node.item.iconColor !== undefined ? this.resolveColor(node.item.iconColor) : undefined;
             const labelColor = node.item.labelColor !== undefined ? this.resolveColor(node.item.labelColor) : undefined;
             // Метка имени начинается сразу после иконки типа (если она есть).
-            const labelStart = this.rowIndentX(node.depth) + 2 + (rowIcon ? 2 : 0);
+            const labelStart = this.labelStartX(node);
+            const labelEnd = labelStart + node.labelWidth;
             // Цвет-декорация имени уступает выделению/курсору, чтобы выбранная строка
             // оставалась читаемой (тот же приоритет, что и у cutFg).
             const labelColorActive = labelColor !== undefined && !(isCursor || isSelected);
+            // Описание приглушено (`.label-description` эталона), а на выбранной
+            // строке берёт её цвет — по тому же правилу, что цвет-декорация имени.
+            const descriptionFg = isCursor || isSelected ? rowFg : this.styleVar("descriptionForeground");
             const dl = new DisplayLine(rowText);
 
             let screenX = 0;
@@ -424,8 +461,11 @@ export class TreeViewElement<T> extends ScrollableElement {
                 // Override the name span with the git-status colour (deemphasised by
                 // selection above). Applies only to the label columns, so the type icon
                 // keeps its own colour.
-                if (labelColorActive && col >= labelStart) {
+                if (labelColorActive && col >= labelStart && col < labelEnd) {
                     fg = labelColor;
+                }
+                if (col > labelEnd) {
+                    fg = descriptionFg;
                 }
 
                 // Color the icon character
@@ -480,7 +520,70 @@ export class TreeViewElement<T> extends ScrollableElement {
                     width: 1,
                 });
             }
+
+            // Inline-действия — левее бейджей, на строке под мышью, курсора и
+            // выделенных (`:hover`, `.focused`, `.selected` у эталона). Прижаты к
+            // краю viewport'а, а не контента, и заливают фон строки под собой.
+            if (isHovered || isCursor || isSelected) {
+                this.renderInlineActions(context, node, screenY, viewportWidth, rowFg, rowBg, isHovered);
+            }
         }
+    }
+
+    private renderInlineActions(
+        context: RenderContext,
+        node: FlatTreeNode<T>,
+        screenY: number,
+        viewportWidth: number,
+        fg: number,
+        rowBg: number,
+        isHovered: boolean,
+    ): void {
+        const layout = this.inlineActionsLayout(node, viewportWidth);
+        if (layout === null) return;
+        for (let x = layout.start; x < layout.end; x++) {
+            context.setCell(x, screenY, { char: " ", fg, bg: rowBg, width: 1 });
+        }
+        for (const span of layout.spans) {
+            const hot = isHovered && this.hoveredAction === span.index;
+            const bg = hot ? this.styleVar("toolbar.hoverBackground") : rowBg;
+            let x = span.start;
+            for (const slot of span.text.slots) {
+                context.setCell(x, screenY, { char: slot.grapheme, fg, bg, width: slot.displayWidth });
+                x += slot.displayWidth;
+            }
+        }
+    }
+
+    /**
+     * Раскладка inline-действий строки в координатах viewport'а: `spans` —
+     * глифы `[start, end)` с номером действия, `[start, end)` — весь блок с
+     * пробелом слева и, если справа бейдж или стрелка симлинка, пробелом перед
+     * ними. Не влезший глиф и всё левее него не рисуются. null — рисовать нечего.
+     */
+    private inlineActionsLayout(node: FlatTreeNode<T>, viewportWidth: number): InlineActionsLayout | null {
+        const actions = node.item.actions ?? [];
+        // Левая граница бейджей у правого края: см. отрисовку badge/симлинка.
+        let right = viewportWidth;
+        if (node.item.badge) right -= Array.from(node.item.badge).length;
+        if (node.item.symlink) right -= 1;
+        const end = right;
+        if (right < viewportWidth) right -= 1;
+        const spans: InlineActionSpan[] = [];
+        for (let index = actions.length - 1; index >= 0; index--) {
+            const text = new DisplayLine(actionText(actions[index]));
+            const start = right - text.displayWidth;
+            if (start < 0) break;
+            spans.unshift({ start, end: right, index, text });
+            right = start - 1;
+        }
+        return spans.length === 0 ? null : { start: Math.max(right, 0), end, spans };
+    }
+
+    /** Inline-действие под колонкой viewport'а `x` на строке узла, либо null. */
+    private inlineActionAt(node: FlatTreeNode<T>, x: number): number | null {
+        const spans = this.inlineActionsLayout(node, this.layoutSize.width)?.spans ?? [];
+        return spans.find((span) => x >= span.start && x < span.end)?.index ?? null;
     }
 
     private resolveRowColors(
@@ -587,16 +690,17 @@ export class TreeViewElement<T> extends ScrollableElement {
         for (const element of children) {
             const key = this.provider.getKey(element);
             const item = this.provider.getTreeItem(element);
-            this.flatNodes.push({ element, depth, item, parentKey });
 
-            const label = rowLabel(item);
-            let labelWidth = labelWidths.get(label);
-            if (labelWidth === undefined) {
-                labelWidth = previousWidths.get(label) ?? new DisplayLine(label).displayWidth;
-                labelWidths.set(label, labelWidth);
-            }
-            // indent + expandIcon + space + icon + space + label
-            const rowWidth = this.rowIndentX(depth) + 2 + (item.icon ? 2 : 0) + labelWidth;
+            const labelWidth = this.textWidth(rowLabel(item), previousWidths, labelWidths);
+            this.flatNodes.push({ element, depth, item, parentKey, labelWidth });
+            const description = rowDescription(item);
+            // indent + expandIcon + space + icon + space + label [+ space + description]
+            const rowWidth =
+                this.rowIndentX(depth) +
+                2 +
+                (item.icon ? 2 : 0) +
+                labelWidth +
+                (description === null ? 0 : 1 + this.textWidth(description, previousWidths, labelWidths));
             if (rowWidth > this.maxRowWidth) {
                 this.maxRowWidth = rowWidth;
             }
@@ -612,6 +716,16 @@ export class TreeViewElement<T> extends ScrollableElement {
         }
     }
 
+    /** Ширина текста в колонках через поколенческий кэш {@link labelWidths}. */
+    private textWidth(text: string, previousWidths: Map<string, number>, widths: Map<string, number>): number {
+        let width = widths.get(text);
+        if (width === undefined) {
+            width = previousWidths.get(text) ?? new DisplayLine(text).displayWidth;
+            widths.set(text, width);
+        }
+        return width;
+    }
+
     /** Колонка (в координатах контента), с которой начинается строка узла данной глубины. */
     private rowIndentX(depth: number): number {
         return this.leftPadding + depth * INDENT_SIZE;
@@ -625,7 +739,9 @@ export class TreeViewElement<T> extends ScrollableElement {
                 : ICON_COLLAPSED
             : " ";
         const icon = node.item.icon ? node.item.icon + " " : "";
-        return `${indent}${expandIcon} ${icon}${rowLabel(node.item)}`;
+        const description = rowDescription(node.item);
+        const suffix = description === null ? "" : ` ${description}`;
+        return `${indent}${expandIcon} ${icon}${rowLabel(node.item)}${suffix}`;
     }
 
     // ─── Private: сегменты компактной строки ───
@@ -1016,6 +1132,15 @@ export class TreeViewElement<T> extends ScrollableElement {
         }
         if (event.button !== "left") return; // правый клик несёт событие contextmenu
 
+        // Клик по inline-действию: курсор на строку, и только действие — без
+        // раскрытия и открытия (кнопка у эталона гасит клик строки).
+        const action = this.inlineActionAt(this.flatNodes[index], event.localX);
+        if (action !== null) {
+            this.setSelectedIndex(index);
+            this.onInlineAction?.(this.flatNodes[index].element, action);
+            return;
+        }
+
         if (event.ctrlKey) {
             this.toggleSelectionAt(index);
             return;
@@ -1064,6 +1189,7 @@ export class TreeViewElement<T> extends ScrollableElement {
         if (index < 0 || index >= this.flatNodes.length) return;
 
         const node = this.flatNodes[index];
+        if (this.inlineActionAt(node, event.localX) !== null) return;
         if (!node.item.collapsible) {
             this.onActivate?.(node.element, OPEN_PINNED);
             return;
@@ -1075,13 +1201,19 @@ export class TreeViewElement<T> extends ScrollableElement {
     private handleMouseMove(event: TUIMouseEvent): void {
         const index = this.scrollTop + event.localY;
         const newHovered = index >= 0 && index < this.flatNodes.length ? index : null;
+        const node = newHovered === null ? null : this.flatNodes[newHovered];
+        const newAction = node === null ? null : this.inlineActionAt(node, event.localX);
+        // Под действием текст строки не виден — сегмент под ним не подчёркивается.
         const newSegment =
-            newHovered === null
-                ? null
-                : this.segmentAtColumn(this.flatNodes[newHovered], this.scrollLeft + event.localX);
-        if (newHovered !== this.hoveredIndex || newSegment !== this.hoveredSegment) {
+            node === null || newAction !== null ? null : this.segmentAtColumn(node, this.scrollLeft + event.localX);
+        if (
+            newHovered !== this.hoveredIndex ||
+            newSegment !== this.hoveredSegment ||
+            newAction !== this.hoveredAction
+        ) {
             this.hoveredIndex = newHovered;
             this.hoveredSegment = newSegment;
+            this.hoveredAction = newAction;
             this.markDirty();
         }
     }
@@ -1090,6 +1222,7 @@ export class TreeViewElement<T> extends ScrollableElement {
         if (this.hoveredIndex !== null) {
             this.hoveredIndex = null;
             this.hoveredSegment = null;
+            this.hoveredAction = null;
             this.markDirty();
         }
     }

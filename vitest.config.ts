@@ -19,7 +19,7 @@ export default defineConfig({
                 statements: 99.54,
                 branches: 99.71,
                 functions: 98.88,
-                lines: 99.6,
+                lines: 99.61,
             },
             reporter: ["text", "lcov", "json", "json-summary", "text-summary"],
             include: ["packages/*/src/**/*.ts"],

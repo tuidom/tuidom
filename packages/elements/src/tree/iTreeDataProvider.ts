@@ -1,5 +1,13 @@
 import type { StyleColor } from "@tuidom/core/dom/styles/tuiStyle";
 
+/** Inline-действие строки ({@link ITreeItem.actions}): глиф-кнопка у правого края. */
+export interface ITreeItemAction {
+    /** Заголовок: рисуется вместо глифа, если {@link icon} не задан. */
+    readonly label: string;
+    /** Готовый глиф (напр. codicon). */
+    readonly icon?: string;
+}
+
 export interface ITreeItem {
     readonly label: string;
     readonly icon?: string;
@@ -19,6 +27,17 @@ export interface ITreeItem {
      * {@link TreeViewElement.getSegmentIndex}. Меньше двух сегментов — обычная строка.
      */
     readonly labelSegments?: readonly string[];
+    /**
+     * Вторичный текст после метки через пробел, приглушённым цветом
+     * (`TreeItem.description` VS Code). На узкой ширине обрезается первым.
+     */
+    readonly description?: string;
+    /**
+     * Inline-действия строки (пункты `view/item/context` с `group: "inline"` у
+     * VS Code): глифы у правого края viewport'а, только на строке под мышью,
+     * курсора и выделенных. Клик — {@link TreeViewElement.onInlineAction}.
+     */
+    readonly actions?: readonly ITreeItemAction[];
 }
 
 export interface ITreeDataProvider<T> {
