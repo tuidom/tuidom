@@ -3,7 +3,7 @@
 `TerminalViewElement` (`packages/elements/src/terminal/`) — чистый лист-виджет:
 каждый кадр читает сетку ячеек через `ITerminalSurface` (`readCell`/`getCursor`)
 и блитит её в grid. Оркестрация — PTY, VT-эмуляция (node-pty + `@xterm/headless`),
-упаковка в панель — сторона хоста и живёт в vexx; в tuidom она не переезжает.
+упаковка в панель — сторона хоста и живёт в хосте (Diode); в tuidom она не переезжает.
 
 Задачи виджетной части:
 

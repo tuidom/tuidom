@@ -93,7 +93,7 @@ function drawFrame0(grid: Grid): void {
     let row = 1;
 
     // Title
-    drawText(grid, 2, row, "vexx Renderer Demo", YELLOW, DARK, StyleFlags.Bold);
+    drawText(grid, 2, row, "TUIDom Renderer Demo", YELLOW, DARK, StyleFlags.Bold);
     row += 2;
 
     // Color blocks with labels

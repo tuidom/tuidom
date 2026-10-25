@@ -1,7 +1,7 @@
 # TUIDom
 
 > ⚠️ **Experimental.** This is the TUI engine that powers the
-> [Vexx](https://github.com/tihonove/vexx) terminal editor. The API is
+> [Diode](https://github.com/diode-editor/diode) terminal editor. The API is
 > **unstable** — no semver guarantees, anything may change between releases.
 > Deep imports expose internals on purpose: there is no curated public surface yet.
 

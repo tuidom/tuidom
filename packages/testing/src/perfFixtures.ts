@@ -7,7 +7,7 @@ import type { ITreeDataProvider, ITreeItem } from "@tuidom/elements/tree/iTreeDa
 // ─── Файловые фикстуры ──────────────────────────────────────────────────────
 
 /** Создаёт уникальную временную директорию под os.tmpdir(). */
-export function createTempDir(prefix = "vexx-perf-"): string {
+export function createTempDir(prefix = "tuidom-perf-"): string {
     return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
 }
 

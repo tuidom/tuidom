@@ -42,7 +42,8 @@ export class TuiApplication {
     private renderScheduled = false;
     /**
      * Прогонять {@link assertValidTree} после каждого кадра. Включено в тестовых
-     * харнессах (TestApp) и опционально в приложении (env VEXX_VALIDATE_TREE=1):
+     * харнессах (TestApp) и опционально в приложении (tuidom даёт только флаг, env читает хост —
+     * Diode включает его по DIODE_VALIDATE_TREE=1):
      * забытый setParent / неукоренённое поддерево падают громко на первом же
      * кадре, а не молчаливым «не показывается / не кликается».
      */

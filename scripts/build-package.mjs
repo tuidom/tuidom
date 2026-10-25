@@ -73,7 +73,7 @@ import { HeadlessCaptureBackend } from "@tuidom/headless-backend/headlessCapture
 // Остальные пакеты — smoke на резолв/загрузку deep-путей.
 import { attachInspector } from "@tuidom/inspector/attachInspector";
 import { isInsideTmux } from "@tuidom/terminal-backend/terminalEnv";
-// Тест-харнесс — публикуемая поверхность: vexx (и любой хост) тестируется им из пакета.
+// Тест-харнесс — публикуемая поверхность: Diode (и любой хост) тестируется им из пакета.
 import { renderElement } from "@tuidom/testing/renderElement";
 import { TestApp } from "@tuidom/testing/TestApp";
 
