@@ -45,7 +45,9 @@ describe("TerminalViewElement — keyboard", () => {
     ])("encodes ArrowUp by the surface's application cursor keys mode (%s)", (applicationCursorKeys, expected) => {
         const { el, surface } = makeElement();
         surface.applicationCursorKeys = applicationCursorKeys;
-        el.dispatchEvent(new TUIKeyboardEvent("keydown", { key: "ArrowUp" }));
+        const event = new TUIKeyboardEvent("keydown", { key: "ArrowUp" });
+        expect(el.encodeKey(event)).toBe(expected);
+        el.dispatchEvent(event);
         expect(surface.writes).toEqual([expected]);
     });
 

@@ -102,6 +102,15 @@ export class TerminalViewElement extends TUIElement {
         });
     }
 
+    /**
+     * Байты, которые виджет отправит в PTY на это нажатие, или "" — клавишу он не возьмёт.
+     * Хост спрашивает его, решая, отдавать ли сочетание терминалу или своим биндам: режим
+     * кодирования (DECCKM поверхности) у ответа тот же, что у самого виджета.
+     */
+    public encodeKey(event: TUIKeyboardEvent): string {
+        return encodeKeyForPty(event, { applicationCursorKeys: this.surface.applicationCursorKeys });
+    }
+
     /** Рвёт подписки на поверхность. Вызывается владельцем виджета (контроллером). */
     public dispose(): void {
         for (const sub of this.subscriptions) sub.dispose();
@@ -186,7 +195,7 @@ export class TerminalViewElement extends TUIElement {
                 this.surface.scrollLines(key.key === "PageUp" ? -page : page);
                 return;
             }
-            const bytes = encodeKeyForPty(key, { applicationCursorKeys: this.surface.applicationCursorKeys });
+            const bytes = this.encodeKey(key);
             if (bytes !== "") {
                 event.preventDefault();
                 this.surface.write(bytes);
