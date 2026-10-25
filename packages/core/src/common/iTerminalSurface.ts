@@ -66,6 +66,13 @@ export interface ITerminalSurface {
     readonly mouseEventsActive: boolean;
 
     /**
+     * Включила ли программа в шелле application cursor keys (DECCKM, `CSI ? 1 h`). Пока
+     * `true` — стрелки и Home/End без модификаторов кодируются как SS3 (`ESC O A`), см.
+     * encodeKeyForPty. Поверхность без эмулятора отдаёт `false`.
+     */
+    readonly applicationCursorKeys: boolean;
+
+    /**
      * На сколько строк вьюпорт поднят в скролбэк. `0` — смотрим на дно, живой вывод.
      * Пока значение > 0, `getCursor()` отдаёт `null`: курсор шелла живёт на дне, и
      * показывать его поверх истории нельзя.

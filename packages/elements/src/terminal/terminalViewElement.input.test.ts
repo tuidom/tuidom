@@ -20,6 +20,9 @@ describe("TerminalViewElement — keyboard", () => {
         ["a", {}, "a"],
         ["Enter", {}, "\r"],
         ["c", { ctrlKey: true }, "\x03"], // Ctrl+C
+        ["Tab", { shiftKey: true }, "\x1b[Z"], // Shift+Tab
+        ["ArrowLeft", { ctrlKey: true }, "\x1b[1;5D"],
+        ["F5", {}, "\x1b[15~"],
     ])("encodes keydown %s to the exact PTY bytes", (key, mods, expected) => {
         const { el, surface } = makeElement();
         const event = new TUIKeyboardEvent("keydown", { key, ...mods });
@@ -30,10 +33,22 @@ describe("TerminalViewElement — keyboard", () => {
 
     it("does not write or preventDefault for an untranslatable key", () => {
         const { el, surface } = makeElement();
-        const event = new TUIKeyboardEvent("keydown", { key: "F1" });
+        const event = new TUIKeyboardEvent("keydown", { key: "F13" });
         el.dispatchEvent(event);
         expect(surface.writes).toEqual([]);
         expect(event.defaultPrevented).toBe(false);
+    });
+
+    it.each([
+        [false, "\x1b[A"],
+        [true, "\x1bOA"],
+    ])("encodes ArrowUp by the surface's application cursor keys mode (%s)", (applicationCursorKeys, expected) => {
+        const { el, surface } = makeElement();
+        surface.applicationCursorKeys = applicationCursorKeys;
+        const event = new TUIKeyboardEvent("keydown", { key: "ArrowUp" });
+        expect(el.encodeKey(event)).toBe(expected);
+        el.dispatchEvent(event);
+        expect(surface.writes).toEqual([expected]);
     });
 
     it.each(["E", "e"])("leaves Ctrl+Shift+%s to the host: no PTY write, no preventDefault", (key) => {
