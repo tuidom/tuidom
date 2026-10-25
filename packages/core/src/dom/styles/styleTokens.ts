@@ -63,7 +63,7 @@ export const STYLE_TOKEN_DEFAULTS = {
     "editorGroupHeader.tabsBackground": packRgb(37, 37, 38),
 
     // ── Панель с заголовком ──
-    // Дефолтов `panel.*` здесь больше нет: виджет нижней панели уехал в vexx
+    // Дефолтов `panel.*` здесь больше нет: виджет нижней панели уехал в Diode
     // (прикладной — его API оперировал понятиями панели IDE), и токены вместе с
     // ним, в его реестр цветов.
     "titledPanel.titleForeground": packRgb(130, 130, 130),

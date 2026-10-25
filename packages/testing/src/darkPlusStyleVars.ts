@@ -1,6 +1,6 @@
-// Снапшот палитры Dark+ (vexx), выгруженный данными: тест-харнесс tuidom
-// резолвит токены в те же цвета, что видит приложение vexx, не завися от
-// его кода темы. Регенерация (из репозитория vexx):
+// Снапшот палитры Dark+ (Diode), выгруженный данными: тест-харнесс tuidom
+// резолвит токены в те же цвета, что видит приложение Diode, не завися от
+// его кода темы. Регенерация (из репозитория diode):
 //   npx tsx <scratchpad>/gen-dark-plus-vars.ts > tuidom/testing/darkPlusStyleVars.ts
 // где скрипт печатает computeThemeVars(WorkbenchTheme.fromThemeFile(darkPlusTheme)).
 

@@ -172,7 +172,7 @@ select-списки tuidom: это возможность движка, а вк�
 ## Доставка темы (контракт хоста)
 
 Одна точка: хост кладёт всю палитру активной темы в корневой var-scope одним
-вызовом `root.setStyleVars(vars)` (в Vexx это делает `applyThemeVars` в
+вызовом `root.setStyleVars(vars)` (в Diode это делает `applyThemeVars` в
 `themeStyleVars.ts`; в тестах — снапшот Dark+ из
 `testing/darkPlusStyleVars.ts`). Hot-swap темы = повторный вызов, дерево
 перерезолвится каскадом. Компоненты задают ИМЕНА токенов в `style` своих

@@ -35,7 +35,8 @@ import type { TUIElement } from "./tuiElement.ts";
  *
  * Использование: в тестах — автоматически после каждого кадра
  * (`TuiApplication.validateTreeAfterRender`, включает TestApp); в приложении —
- * опционально через тот же флаг (env `VEXX_VALIDATE_TREE=1` в main).
+ * опционально через тот же флаг: env читает хост (Diode — `DIODE_VALIDATE_TREE=1`),
+ * core env не читает.
  */
 export function validateTree(root: TUIElement): string[] {
     const violations: string[] = [];

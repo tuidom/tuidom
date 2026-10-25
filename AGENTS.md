@@ -1,4 +1,4 @@
-TUIDom — DOM-подобный движок терминального UI (вынесен из редактора [Vexx](https://github.com/tihonove/vexx)). Монорепа на **чистых npm workspaces** (без pnpm/turbo/lerna); публикуется набором lockstep-пакетов `@tuidom/*`.
+TUIDom — DOM-подобный движок терминального UI (вынесен из редактора [Diode](https://github.com/diode-editor/diode)). Монорепа на **чистых npm workspaces** (без pnpm/turbo/lerna); публикуется набором lockstep-пакетов `@tuidom/*`.
 
 # Карта
 
@@ -7,7 +7,7 @@ TUIDom — DOM-подобный движок терминального UI (вы
   - `elements/` — виджеты (бывший `ui/`, без префикса: `@tuidom/elements/body/…`);
   - `terminal-backend/` — реальный терминал (tty, Kitty); `headless-backend/` — рендер в память (скриншоты/e2e);
   - `inspector/` — WebSocket-инспектор (рукописный RFC6455, zero-dep); зависит от core+elements;
-  - `testing/` — публикуемый тест-харнесс (`TestApp`, `renderElement`, `expectScreen`, `mockTerminalBackend`; палитра — снапшот Dark+ в `darkPlusStyleVars.ts`, регенерируется из vexx; `storyTypes`/`perfFixtures` публикуются — их тянет vexx);
+  - `testing/` — публикуемый тест-харнесс (`TestApp`, `renderElement`, `expectScreen`, `mockTerminalBackend`; палитра — снапшот Dark+ в `darkPlusStyleVars.ts`, регенерируется из diode; `storyTypes`/`perfFixtures` публикуются — их тянет diode);
   - `stories/` — **приватный**: все `*.stories.ts`, перф-бенчи, демо-виджеты (`FocusableBox`, `WASDScrollableElement`).
 - `demos/` — приватный воркспейс: standalone-хосты (`npm run demo`, `demo:inspect`, …).
 - `docs/` — LAYOUT.md, STYLES.md (внутренние спеки/ADR), arch/, TODO/ (задачи «сделать потом»). Пользовательская дока — `GUIDE.md` в корне (англ.).
@@ -26,7 +26,7 @@ TUIDom — DOM-подобный движок терминального UI (вы
 - Покрытие — общий храповик в корневом `vitest.config.ts` (`npm run test:coverage`); пакет `stories` исключён целиком; недостижимое юнитами — в exclude с комментарием, планку не опускать.
 - Иконки/PUA-глифы в константах писать эскейпами `\uXXXX`, не литералами.
 - Приватные члены — без подчёркивания, просто модификатор.
-- Главный потребитель — vexx: он ставит пакеты из npm. Изменил поверхность — прогони его сьют против свежих tgz (`npm i --no-save ../tuidom/tuidom/tuidom-*.tgz` в checkout vexx) до публикации.
+- Главный потребитель — Diode: он ставит пакеты из npm. Изменил поверхность — прогони его сьют против свежих tgz до публикации: в checkout diode `npm run engine:link` (берёт `TUIDOM_DIR`, см. diode `docs/TESTING.md`) или `npm i --no-save <путь>/tuidom-*.tgz`.
 - Сайд-проект storybook/prototyper (соседний репозиторий) сидит на `@tuidom/core` — при изменении `rendering/`/`common/` его тоже стоит прогнать.
 
 # Публикация

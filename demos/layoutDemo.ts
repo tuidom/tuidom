@@ -249,7 +249,7 @@ function renderMenuBar(grid: Grid, x: number, y: number, w: number): void {
 
 const fileTreeLines = [
     { text: "EXPLORER", indent: 0, isBold: true },
-    { text: "▼ VEXX", indent: 0, isBold: true },
+    { text: "▼ DIODE", indent: 0, isBold: true },
     { text: "▼ src", indent: 1, isBold: false },
     { text: "  main.ts", indent: 2, isBold: false },
     { text: "▼ Backend", indent: 2, isBold: false },

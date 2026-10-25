@@ -37,7 +37,7 @@ export const BORDER_SINGLE: BorderStyle = {
     rightJoint: "┤",
 };
 
-/** Скруглённые углы `╭╮╰╯` (nvchad-стиль) — канонический стиль рамок во всех оверлеях Vexx. */
+/** Скруглённые углы `╭╮╰╯` (nvchad-стиль) — канонический стиль рамок во всех оверлеях Diode. */
 export const BORDER_ROUNDED: BorderStyle = {
     topLeft: "╭",
     topRight: "╮",

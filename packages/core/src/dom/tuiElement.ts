@@ -170,7 +170,7 @@ export class RenderContext {
      * @param width   Ширина рамки в столбцах (>= 2)
      * @param height  Высота рамки в строках (>= 2)
      * @param options fg/bg, пресет `style` (по умолчанию {@link BORDER_ROUNDED} —
-     *                канонический стиль оверлеев Vexx), `fill` (залить фон внутри
+     *                канонический стиль оверлеев Diode), `fill` (залить фон внутри
      *                рамки), `separators` (ряды-разделители)
      *
      * Как и {@link drawText}, кладёт ячейки целиком: флаги стиля сбрасываются в
