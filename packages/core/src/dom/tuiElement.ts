@@ -13,6 +13,7 @@ import type { TUIFocusEvent } from "./events/tuiFocusEvent.ts";
 import { TUIKeyboardEvent } from "./events/tuiKeyboardEvent.ts";
 import type { TUIMouseEvent } from "./events/tuiMouseEvent.ts";
 import type { TUIPasteEvent } from "./events/tuiPasteEvent.ts";
+import { GLYPH_TOKEN_DEFAULTS, type GlyphTable, type GlyphToken } from "./glyphTokens.ts";
 import type { OverlayLayer } from "./overlayLayer.ts";
 import type { AnyStyleToken } from "./styles/styleTokens.ts";
 import { ROOT_VAR_SCOPE } from "./styles/styleTokens.ts";
@@ -344,6 +345,8 @@ export class TUIElement {
     private styleStatesSet: Set<string> | null = null;
     // Собственная таблица токенов (обычно только у корня — хост кладёт тему).
     private styleVarsValue: Readonly<Record<string, number>> | null = null;
+    // Собственная таблица глифов (обычно только у корня) — см. setGlyphs.
+    private glyphsValue: GlyphTable | null = null;
     // Ближайший резолвленный var-scope — источник styleVar(). До первого
     // резолва — дефолты tuidom.
     private varScopeRef: StyleVarScope = ROOT_VAR_SCOPE;
@@ -910,6 +913,33 @@ export class TUIElement {
     public resolveColor(color: StyleColor): number {
         const { fg, bg } = this.resolvedStyleValue;
         return resolveStyleColor(color, fg, bg, this.varScopeRef, () => this.describeForStyleError());
+    }
+
+    // ─── Глифы виджетов ───
+
+    /**
+     * Кладёт таблицу глифов, каскадирующую в поддерево поверх таблиц предков и
+     * дефолтов tuidom ({@link GLYPH_TOKEN_DEFAULTS}, Nerd Font). Обычное место —
+     * корень: хост без Nerd Font задаёт символы Unicode одним вызовом; смена
+     * набора — повторный вызов, дерево перерисовывается. Таблица заменяется
+     * целиком, null — снимает. Значение — одна ячейка терминала.
+     */
+    public setGlyphs(glyphs: GlyphTable | null): void {
+        if (glyphs === this.glyphsValue) return;
+        this.glyphsValue = glyphs;
+        // Глиф входит в раскладку (ширина вкладки с замком), поэтому layout,
+        // а не только paint; повреждённый rect элемента перерисовывает потомков.
+        this.markDirty();
+    }
+
+    /** Глиф по токену: ближайшая таблица среди самого элемента и его предков, иначе дефолт tuidom. */
+    public glyph(name: GlyphToken): string {
+        // eslint-disable-next-line @typescript-eslint/no-this-alias
+        for (let current: TUIElement | null = this; current !== null; current = current._parent) {
+            const value = current.glyphsValue?.[name];
+            if (value !== undefined) return value;
+        }
+        return GLYPH_TOKEN_DEFAULTS[name];
     }
 
     // ─── Состояния стиля ───

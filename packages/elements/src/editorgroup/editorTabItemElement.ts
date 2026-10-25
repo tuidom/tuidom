@@ -5,10 +5,6 @@ import { RenderContext, TUIElement } from "@tuidom/core/dom/tuiElement";
 
 const CLOSE_CHAR = "×";
 const MODIFIED_CHAR = "●";
-// Codicon-замок — тот же глиф, которым VS Code метит read-only вкладку.
-// Пишется escape'ом, а не литералом: глиф из Private Use Area не переживает
-// копирование через инструменты и тихо превращается в пустую строку.
-const READONLY_CHAR = "\uea75"; // nf-cod-lock
 
 /** Стилевое состояние вкладки удалённого файла (см. {@link EditorTabItemElement.setDeleted}). */
 export const DELETED_STATE = "deleted";
@@ -200,7 +196,7 @@ export class EditorTabItemElement extends TUIElement {
         // is the one part that does change the width: read-only is a rare, sticky
         // state, and squeezing it into an existing slot would hide the file icon.
         const iconPart = this.icon.length > 0 ? this.icon.length + 1 : 0; // icon + space
-        const lockPart = this.readOnly ? READONLY_CHAR.length + 1 : 0; // lock + space
+        const lockPart = this.readOnly ? 2 : 0; // lock (one cell, see GLYPH_TOKEN_DEFAULTS) + space
         const trailingPart = 2; // " ●" or " ×"
         return this.paddingLeft + iconPart + lockPart + this.label.length + trailingPart + this.paddingRight;
     }
@@ -259,8 +255,9 @@ export class EditorTabItemElement extends TUIElement {
 
         // Read-only lock, between the file icon and the label.
         if (this.readOnly && x < width) {
-            context.setCell(x, 0, { char: READONLY_CHAR, fg: resolved.fg, bg: resolved.bg });
-            x += READONLY_CHAR.length;
+            // Codicon-замок по умолчанию — тот же глиф, которым VS Code метит read-only вкладку.
+            context.setCell(x, 0, { char: this.glyph("editorTab.readOnly"), fg: resolved.fg, bg: resolved.bg });
+            x += 1;
             if (x < width) {
                 context.setCell(x, 0, { char: " ", fg: resolved.fg, bg: resolved.bg });
                 x += 1;

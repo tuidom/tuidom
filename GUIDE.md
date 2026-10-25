@@ -256,6 +256,23 @@ Hot-swapping the theme is just calling it again — the tree re-resolves through
 the cascade. Widgets declare token *names* once at construction and never
 listen to theme changes.
 
+### Widget glyphs (no Nerd Font)
+
+The glyphs widgets draw themselves — tree and list chevrons, the lock of a
+read-only editor tab, completion kind icons — default to Nerd Font symbols
+(`GLYPH_TOKEN_DEFAULTS` in `@tuidom/core/dom/glyphTokens`). A host whose
+terminal font lacks them overrides any of them with one call, the same way as
+the palette:
+
+```ts
+root.setGlyphs({ "tree.expanded": "▾", "tree.collapsed": "▸", "editorTab.readOnly": "•" });
+```
+
+The table cascades into the subtree over the ancestors' tables and the
+defaults; calling it again (or with `null`) repaints the tree. Each value must
+be exactly one terminal cell — no emoji or wide characters. Custom widgets read
+a glyph with `this.glyph("tree.expanded")`.
+
 ### Overlay shadow
 
 Popups in VS Code cast a `box-shadow`; the TUI counterpart is

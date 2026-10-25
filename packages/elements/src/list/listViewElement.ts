@@ -27,8 +27,6 @@ const TYPEAHEAD_TIMEOUT_MS = 800;
  * оказаться где угодно над списком.
  */
 export const LIST_ROW_ACTIVE_STATE = "rowActive";
-const ICON_EXPANDED = ""; //  nf-fa-angle_down — chevron, как в TreeViewElement
-const ICON_COLLAPSED = ""; //  nf-fa-angle_right
 
 export interface IListRowOptions {
     /** Родительская строка; глубина/отступ выводятся из цепочки родителей. */
@@ -585,7 +583,7 @@ export class ListViewElement extends ScrollableElement {
 
             // 3. Шеврон сворачиваемой строки — поверх, на фоне строки.
             if (this.hasCollapsibleRows && this.rowHasChildren(row.id)) {
-                const icon = this.collapsedIds.has(row.id) ? ICON_COLLAPSED : ICON_EXPANDED;
+                const icon = this.collapsedIds.has(row.id) ? this.glyph("tree.collapsed") : this.glyph("tree.expanded");
                 context.setCell(row.depth * this.indentSize, screenY, {
                     char: icon,
                     fg: this.styleVar("list.deemphasizedForeground"),

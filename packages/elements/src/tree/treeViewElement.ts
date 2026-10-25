@@ -14,8 +14,6 @@ const INDENT_SIZE = 2;
 // Окно, в течение которого напечатанные символы складываются в одну последовательность
 // быстрого поиска; после паузы буфер сбрасывается (как в VS Code / файловых менеджерах).
 const TYPEAHEAD_TIMEOUT_MS = 800;
-const ICON_EXPANDED = "\uF107"; //  nf-fa-angle_down — chevron, как в nvim-tree/NvChad
-const ICON_COLLAPSED = "\uF105"; //  nf-fa-angle_right
 const SYMLINK_BADGE = "\u21B5"; // enter-like arrow marking a symlink, pinned to the right edge
 
 const SEGMENT_SEPARATOR = "/";
@@ -744,8 +742,8 @@ export class TreeViewElement<T> extends ScrollableElement {
         const indent = " ".repeat(this.rowIndentX(node.depth));
         const expandIcon = node.item.collapsible
             ? this.expandedKeys.has(this.provider.getKey(node.element))
-                ? ICON_EXPANDED
-                : ICON_COLLAPSED
+                ? this.glyph("tree.expanded")
+                : this.glyph("tree.collapsed")
             : " ";
         const icon = node.item.icon ? node.item.icon + " " : "";
         const description = rowDescription(node.item);
