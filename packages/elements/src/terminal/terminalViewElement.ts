@@ -186,7 +186,7 @@ export class TerminalViewElement extends TUIElement {
                 this.surface.scrollLines(key.key === "PageUp" ? -page : page);
                 return;
             }
-            const bytes = encodeKeyForPty(key);
+            const bytes = encodeKeyForPty(key, { applicationCursorKeys: this.surface.applicationCursorKeys });
             if (bytes !== "") {
                 event.preventDefault();
                 this.surface.write(bytes);

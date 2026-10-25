@@ -42,6 +42,8 @@ export class FakeTerminalSurface implements ITerminalSurface, IDisposable {
     public isExited = false;
     /** Включила ли «программа в шелле» mouse-tracking — от этого зависит судьба колеса. */
     public mouseEventsActive = false;
+    /** Включила ли «программа в шелле» application cursor keys (DECCKM). */
+    public applicationCursorKeys = false;
     /** Сколько строк истории лежит выше вьюпорта: потолок для `scrollLines`. */
     public scrollbackLines = 0;
     public scrollOffset = 0;
