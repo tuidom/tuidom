@@ -96,10 +96,26 @@ describe("SashElement — mouse pointer shape", () => {
 
         mouse(app, { action: "press", button: "left", x: 2, y: 3 });
         mouse(app, { action: "move", button: "left", x: 10, y: 3 });
-        expect(app.backend.pointerShape).toBe("ew-resize");
-        // Not a captor: the element under the pointer decides, as without a button.
-        mouse(app, { action: "move", button: "left", x: 5, y: 3 });
         expect(app.backend.pointerShape).toBe("default");
+        // Released on the sash: the button is up, the element under the pointer decides again.
+        mouse(app, { action: "release", button: "left", x: 10, y: 3 });
+        expect(app.backend.pointerShape).toBe("ew-resize");
+    });
+
+    it("a press elsewhere keeps its own shape across the sash", () => {
+        const flex = new HFlexElement();
+        const text = new TUIElement();
+        text.pointerShape = "text";
+        flex.addChild(text, { width: hflexFixed(10), height: "fill" });
+        flex.addChild(new SashElement(), { width: hflexFixed(1), height: "fill" });
+        flex.addChild(new TUIElement(), { width: hflexFill(), height: "fill" });
+        const app = TestApp.createWithContent(flex, new Size(40, 10));
+
+        mouse(app, { action: "press", button: "left", x: 2, y: 3 });
+        mouse(app, { action: "move", button: "left", x: 10, y: 3 });
+        expect(app.backend.pointerShape).toBe("text");
+        mouse(app, { action: "move", button: "left", x: 20, y: 3 });
+        expect(app.backend.pointerShape).toBe("text");
     });
 
     it("a hidden sash gives no shape", () => {

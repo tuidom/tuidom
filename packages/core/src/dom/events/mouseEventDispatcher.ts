@@ -55,14 +55,16 @@ export class MouseEventDispatcher {
     }
 
     /**
-     * The pointer shape for the last handled token: the captor's while a button is held
-     * on an element with pointer capture (even off its bounds), otherwise the first
-     * non-null {@link TUIElement.pointerShape} from the element under the pointer up to
-     * the root; `"default"` when nobody on the chain sets one. A modal overlay takes the
+     * The pointer shape for the last handled token: the first non-null
+     * {@link TUIElement.pointerShape} from the element under the pointer up to the root;
+     * `"default"` when nobody on the chain sets one. While a button is held the chain
+     * starts at the pressed element instead, captor or not: a sash keeps its arrow for
+     * the whole drag, and a text selection dragged over a sash does not take the sash's
+     * arrow (vscode's editor selects under pointer capture). A modal overlay takes the
      * point itself, so whatever lies behind it gives no shape.
      */
     public get pointerShape(): string {
-        let element = this.isCapturing() ? this.pressedElement : this.lastTarget;
+        let element = this.isPressed() ? this.pressedElement : this.lastTarget;
         while (element !== null) {
             if (element.pointerShape !== null) return element.pointerShape;
             element = element.getParent();
@@ -77,13 +79,14 @@ export class MouseEventDispatcher {
         this.dispatchOn(target, "mousedown", token, screenX, screenY);
     }
 
+    // True while a button is held on an element.
+    private isPressed(): boolean {
+        return this.pressedElement !== null && this.pressedButton !== null && this.pressedButton !== "none";
+    }
+
     // True while a button is held on an element that opted into pointer capture.
     private isCapturing(): boolean {
-        return (
-            this.pressedElement?.capturesPointer === true &&
-            this.pressedButton !== null &&
-            this.pressedButton !== "none"
-        );
+        return this.isPressed() && this.pressedElement?.capturesPointer === true;
     }
 
     private handleRelease(target: TUIElement | null, token: MouseToken, screenX: number, screenY: number): void {
