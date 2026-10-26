@@ -1,4 +1,5 @@
 import { BoxConstraints, Size } from "@tuidom/core/common/geometryPromitives";
+import { TUIFocusEvent } from "@tuidom/core/dom/events/tuiFocusEvent";
 import { TUIKeyboardEvent } from "@tuidom/core/dom/events/tuiKeyboardEvent";
 import type { TUIMouseEventType } from "@tuidom/core/dom/events/tuiMouseEvent";
 import { TUIMouseEvent } from "@tuidom/core/dom/events/tuiMouseEvent";
@@ -80,6 +81,74 @@ describe("TerminalViewElement — keyboard", () => {
         el.dispatchEvent(up);
         expect(surface.writes).toEqual(["\x1b[97;5u", "\x1b[97;5:3u"]);
         expect(up.defaultPrevented).toBe(true);
+    });
+
+    describe("kitty flag 2: a release only for a press the PTY got", () => {
+        function kittyElement(flags = 3) {
+            const made = makeElement();
+            made.surface.kittyKeyboardFlags = flags;
+            return made;
+        }
+
+        it("does not write a release whose press never reached the widget", () => {
+            const { el, surface } = kittyElement();
+            const up = new TUIKeyboardEvent("keyup", { key: "k", code: "KeyK", ctrlKey: true });
+            el.dispatchEvent(up);
+            expect(surface.writes).toEqual([]);
+            expect(up.defaultPrevented).toBe(false);
+        });
+
+        it("does not write the release of a press the host consumed", () => {
+            const { el, surface } = kittyElement();
+            const consume = (event: TUIKeyboardEvent): void => {
+                event.preventDefault();
+            };
+            el.addEventListener("keydown", consume);
+            el.dispatchEvent(new TUIKeyboardEvent("keydown", { key: "k", code: "KeyK", ctrlKey: true }));
+            el.removeEventListener("keydown", consume);
+            el.dispatchEvent(new TUIKeyboardEvent("keyup", { key: "k", code: "KeyK", ctrlKey: true }));
+            expect(surface.writes).toEqual([]);
+        });
+
+        it("matches the release by code, once", () => {
+            const { el, surface } = kittyElement();
+            el.dispatchEvent(new TUIKeyboardEvent("keydown", { key: "a", code: "KeyA", ctrlKey: true }));
+            el.dispatchEvent(new TUIKeyboardEvent("keyup", { key: "a", code: "KeyA" }));
+            el.dispatchEvent(new TUIKeyboardEvent("keyup", { key: "a", code: "KeyA" }));
+            expect(surface.writes).toEqual(["\x1b[97;5u", "\x1b[97;1:3u"]);
+        });
+
+        it("matches by key when there is no code", () => {
+            const { el, surface } = kittyElement();
+            el.dispatchEvent(new TUIKeyboardEvent("keydown", { key: "Escape" }));
+            el.dispatchEvent(new TUIKeyboardEvent("keyup", { key: "Tab" }));
+            el.dispatchEvent(new TUIKeyboardEvent("keyup", { key: "Escape" }));
+            expect(surface.writes).toEqual(["\x1b[27u", "\x1b[27;1:3u"]);
+        });
+
+        it("a press sent before flag 2 was on gets no release", () => {
+            const { el, surface } = kittyElement(1);
+            el.dispatchEvent(new TUIKeyboardEvent("keydown", { key: "a", code: "KeyA", ctrlKey: true }));
+            surface.kittyKeyboardFlags = 3;
+            el.dispatchEvent(new TUIKeyboardEvent("keyup", { key: "a", code: "KeyA", ctrlKey: true }));
+            expect(surface.writes).toEqual(["\x1b[97;5u"]);
+        });
+
+        it("a press with nothing to write is not remembered", () => {
+            const { el, surface } = kittyElement();
+            el.dispatchEvent(new TUIKeyboardEvent("keydown", { key: "Shift", code: "ShiftLeft", shiftKey: true }));
+            surface.kittyKeyboardFlags = 11;
+            el.dispatchEvent(new TUIKeyboardEvent("keyup", { key: "Shift", code: "ShiftLeft" }));
+            expect(surface.writes).toEqual([]);
+        });
+
+        it("forgets the pressed keys when the focus leaves", () => {
+            const { el, surface } = kittyElement();
+            el.dispatchEvent(new TUIKeyboardEvent("keydown", { key: "a", code: "KeyA", ctrlKey: true }));
+            el.dispatchEvent(new TUIFocusEvent("blur"));
+            el.dispatchEvent(new TUIKeyboardEvent("keyup", { key: "a", code: "KeyA", ctrlKey: true }));
+            expect(surface.writes).toEqual(["\x1b[97;5u"]);
+        });
     });
 
     it("leaves an unreported release to the host with kitty flag 2", () => {
