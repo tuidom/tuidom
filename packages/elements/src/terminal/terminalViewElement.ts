@@ -50,6 +50,10 @@ export class TerminalViewElement extends TUIElement {
     // Подписки на поверхность — TUIElement не имеет lifecycle-хука, поэтому храним их сами
     // и рвём в dispose() (владелец виджета — контроллер — обязан его вызвать).
     private readonly subscriptions: IDisposable[] = [];
+    // Клавиши (по `code`, без него — по `key`), чьё нажатие ушло в PTY при флаге 2. Отпускание шлём
+    // только им: нажатие, которое забрал хост (префикс аккорда, свой шорткат), не должно дойти до
+    // программы одиноким отпусканием — у эталона такие события не видит и xterm.js.
+    private readonly keysDown = new Set<string>();
 
     // Цвета «по умолчанию», которыми заменяем DEFAULT_COLOR ячеек при блите. Контроллер
     // пушит сюда цвета темы (как EditorElement/PanelContainerElement получают цвета извне).
@@ -84,6 +88,10 @@ export class TerminalViewElement extends TUIElement {
         });
         this.addEventListener("mousemove", (event) => {
             this.forwardMouse(event, "move");
+        });
+        // Ушёл фокус — отпускания придут уже не сюда.
+        this.addEventListener("blur", () => {
+            this.keysDown.clear();
         });
         this.addEventListener("wheel", (event) => {
             const mouse = event;
@@ -191,8 +199,8 @@ export class TerminalViewElement extends TUIElement {
         }
         // Отпускание программа получает только по kitty-протоколу с флагом 2 (типы событий), и
         // только от хоста, который сам присылает keyup (внешний терминал с kitty).
-        const isKeyup =
-            event.type === "keyup" && (this.surface.kittyKeyboardFlags & KittyKeyboardFlags.ReportEventTypes) !== 0;
+        const reportsRelease = (this.surface.kittyKeyboardFlags & KittyKeyboardFlags.ReportEventTypes) !== 0;
+        const isKeyup = event.type === "keyup" && reportsRelease;
         if (event.type === "keydown" || isKeyup) {
             const key = event as TUIKeyboardEvent;
             // Shift+PageUp/PageDown — клавиатурный аналог колеса: листаем скролбэк
@@ -204,10 +212,13 @@ export class TerminalViewElement extends TUIElement {
                 this.surface.scrollLines(key.key === "PageUp" ? -page : page);
                 return;
             }
+            const id = key.code !== "" ? key.code : key.key;
+            if (isKeyup && !this.keysDown.delete(id)) return;
             const bytes = this.encodeKey(key);
             if (bytes !== "") {
                 event.preventDefault();
                 this.surface.write(bytes);
+                if (!isKeyup && reportsRelease) this.keysDown.add(id);
             }
             return;
         }
