@@ -73,6 +73,14 @@ export interface ITerminalSurface {
     readonly applicationCursorKeys: boolean;
 
     /**
+     * Текущие флаги kitty keyboard protocol, которые включила программа в шелле
+     * (`CSI > flags u`, `CSI = flags ; mode u`). Пока `> 0` — клавиши кодируются по
+     * протоколу (см. encodeKeyForPty), с флагом 2 виджет шлёт и отпускание. Поверхность без
+     * эмулятора или с выключенным протоколом отдаёт `0`.
+     */
+    readonly kittyKeyboardFlags: number;
+
+    /**
      * На сколько строк вьюпорт поднят в скролбэк. `0` — смотрим на дно, живой вывод.
      * Пока значение > 0, `getCursor()` отдаёт `null`: курсор шелла живёт на дне, и
      * показывать его поверх истории нельзя.

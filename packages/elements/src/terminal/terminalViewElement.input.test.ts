@@ -51,6 +51,46 @@ describe("TerminalViewElement — keyboard", () => {
         expect(surface.writes).toEqual([expected]);
     });
 
+    it.each([
+        [0, "\r"],
+        [1, "\x1b[13;2u"],
+    ])("with kitty keyboard flags %i writes Shift+Enter as %j", (flags, expected) => {
+        const { el, surface } = makeElement();
+        surface.kittyKeyboardFlags = flags;
+        const event = new TUIKeyboardEvent("keydown", { key: "Enter", shiftKey: true });
+        expect(el.encodeKey(event)).toBe(expected);
+        el.dispatchEvent(event);
+        expect(surface.writes).toEqual([expected]);
+    });
+
+    it.each([0, 1, 8])("ignores keyup without kitty flag 2 (flags %i)", (flags) => {
+        const { el, surface } = makeElement();
+        surface.kittyKeyboardFlags = flags;
+        const event = new TUIKeyboardEvent("keyup", { key: "a" });
+        el.dispatchEvent(event);
+        expect(surface.writes).toEqual([]);
+        expect(event.defaultPrevented).toBe(false);
+    });
+
+    it("writes the release on keyup with kitty flag 2", () => {
+        const { el, surface } = makeElement();
+        surface.kittyKeyboardFlags = 3;
+        el.dispatchEvent(new TUIKeyboardEvent("keydown", { key: "a", ctrlKey: true }));
+        const up = new TUIKeyboardEvent("keyup", { key: "a", ctrlKey: true });
+        el.dispatchEvent(up);
+        expect(surface.writes).toEqual(["\x1b[97;5u", "\x1b[97;5:3u"]);
+        expect(up.defaultPrevented).toBe(true);
+    });
+
+    it("leaves an unreported release to the host with kitty flag 2", () => {
+        const { el, surface } = makeElement();
+        surface.kittyKeyboardFlags = 2;
+        const up = new TUIKeyboardEvent("keyup", { key: "Enter" });
+        el.dispatchEvent(up);
+        expect(surface.writes).toEqual([]);
+        expect(up.defaultPrevented).toBe(false);
+    });
+
     it.each(["E", "e"])("leaves Ctrl+Shift+%s to the host: no PTY write, no preventDefault", (key) => {
         const { el, surface } = makeElement();
         const event = new TUIKeyboardEvent("keydown", { key, ctrlKey: true, shiftKey: true });

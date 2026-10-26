@@ -102,6 +102,22 @@ describe("TerminalViewElement — прокрутка с клавиатуры", (
         expect(surface.writes).toEqual([]);
     });
 
+    it.each([1, 3, 15])(
+        "Shift+PageUp/PageDown листает и под kitty-протоколом (флаги %i), отпускание в PTY не уходит",
+        (flags) => {
+            const { el, surface } = makeElement();
+            surface.kittyKeyboardFlags = flags;
+            el.dispatchEvent(key("PageUp", true));
+            expect(surface.scrollOffset).toBe(HEIGHT - 1);
+            const up = new TUIKeyboardEvent("keyup", { key: "PageUp", shiftKey: true });
+            el.dispatchEvent(up);
+            el.dispatchEvent(new TUIKeyboardEvent("keyup", { key: "PageDown", shiftKey: true }));
+            expect(surface.scrollOffset).toBe(HEIGHT - 1);
+            expect(surface.writes).toEqual([]);
+            expect(up.defaultPrevented).toBe((flags & 2) !== 0);
+        },
+    );
+
     it("PageUp без Shift — обычная клавиша шелла", () => {
         const { el, surface } = makeElement();
         el.dispatchEvent(key("PageUp", false));
