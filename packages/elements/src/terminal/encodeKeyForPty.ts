@@ -15,8 +15,14 @@
 //   Alt не кодируется).
 // Клавиша, которую эталон не кодирует, → "": виджет не трогает событие, и оно всплывает
 // к хосту.
+//
+// Программа включила kitty keyboard protocol (флаги поверхности > 0) — кодирует
+// `encodeKittyKey`, как xterm.js при `KittyKeyboard.shouldUseProtocol`. Отпускание
+// (`keyup`) имеет смысл только там, с флагом 2; в легаси оно → "".
 
 import type { TUIKeyboardEvent } from "@tuidom/core/dom/events/tuiKeyboardEvent";
+
+import { encodeKittyKey, KittyKeyboardEventType } from "./kittyKeyboard.ts";
 
 export interface EncodeKeyOptions {
     /**
@@ -24,6 +30,11 @@ export interface EncodeKeyOptions {
      * Home/End без модификаторов уходят как SS3 (`ESC O A`), а не CSI (`ESC [ A`).
      */
     readonly applicationCursorKeys?: boolean;
+    /**
+     * Флаги kitty keyboard protocol, которые включила программа (`CSI > flags u`); `0` —
+     * протокол выключен, легаси-кодировка.
+     */
+    readonly kittyKeyboardFlags?: number;
 }
 
 const ESC = "\x1b";
@@ -93,6 +104,13 @@ function ctrlLetter(key: string): string | undefined {
 
 /** Вернуть байты для PTY, либо "" если клавишу не транслируем. */
 export function encodeKeyForPty(event: TUIKeyboardEvent, options: EncodeKeyOptions = {}): string {
+    const kittyKeyboardFlags = options.kittyKeyboardFlags ?? 0;
+    if (kittyKeyboardFlags > 0) {
+        const eventType = event.type === "keyup" ? KittyKeyboardEventType.Release : KittyKeyboardEventType.Press;
+        return encodeKittyKey(event, kittyKeyboardFlags, eventType);
+    }
+    if (event.type === "keyup") return "";
+
     const { key } = event;
     const applicationCursorKeys = options.applicationCursorKeys ?? false;
 

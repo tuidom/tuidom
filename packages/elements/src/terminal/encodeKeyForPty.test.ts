@@ -251,4 +251,42 @@ describe("encodeKeyForPty", () => {
     ])('returns "" for unhandled combo %s %j', (key, mods: Mods) => {
         expect(encode(key, mods)).toBe("");
     });
+
+    describe("kitty keyboard protocol", () => {
+        function kitty(type: "keydown" | "keyup", key: string, mods: Mods, flags: number): string {
+            return encodeKeyForPty(new TUIKeyboardEvent(type, { key, ...mods }), { kittyKeyboardFlags: flags });
+        }
+
+        it.each([
+            ["Enter", SHIFT, 1, "\x1b[13;2u"],
+            ["Escape", {}, 1, "\x1b[27u"],
+            ["a", {}, 1, "a"],
+            ["a", {}, 8, "\x1b[97u"],
+        ])("encodes %s %j by the protocol with flags %i", (key, mods: Mods, flags, expected) => {
+            expect(kitty("keydown", key, mods, flags)).toBe(expected);
+        });
+
+        it.each([
+            [0, "\r"],
+            [undefined, "\r"],
+        ])("flags %j keep the legacy encoding", (flags, expected) => {
+            const event = new TUIKeyboardEvent("keydown", { key: "Enter", shiftKey: true });
+            expect(encodeKeyForPty(event, flags === undefined ? {} : { kittyKeyboardFlags: flags })).toBe(expected);
+        });
+
+        it("a keyup is a release: reported with flag 2", () => {
+            expect(kitty("keyup", "a", {}, 3)).toBe("\x1b[97;1:3u");
+            expect(kitty("keyup", "a", {}, 1)).toBe("");
+        });
+
+        it("a keyup is never encoded in the legacy encoding", () => {
+            expect(kitty("keyup", "a", {}, 0)).toBe("");
+            expect(kitty("keyup", "Enter", {}, 0)).toBe("");
+        });
+
+        it("application cursor keys do not apply under the protocol", () => {
+            const event = new TUIKeyboardEvent("keydown", { key: "ArrowUp" });
+            expect(encodeKeyForPty(event, { applicationCursorKeys: true, kittyKeyboardFlags: 1 })).toBe("\x1b[A");
+        });
+    });
 });

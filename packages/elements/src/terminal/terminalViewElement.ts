@@ -6,7 +6,7 @@
 // поэтому TUIDom остаётся чистым (без импортов @xterm/headless и node-pty).
 // Размером PTY управляет по реально выделенному месту (`performLayout` → `surface.resize`),
 // поэтому ресайз окна автоматически рефлоует шелл. Ввод пробрасывает в surface через
-// `encodeKeyForPty`. Колесо и Shift+PageUp/PageDown крутят вьюпорт по скролбэку
+// `encodeKeyForPty` (по kitty keyboard protocol, если программа его включила). Колесо и Shift+PageUp/PageDown крутят вьюпорт по скролбэку
 // (`surface.scrollLines`), пока программа в шелле не включила свой mouse-tracking —
 // тогда колесо целиком её. См. docs/TODO/IntegratedTerminal.md.
 
@@ -26,6 +26,7 @@ import type { TUIPasteEvent } from "@tuidom/core/dom/events/tuiPasteEvent";
 import { RenderContext, TUIElement } from "@tuidom/core/dom/tuiElement";
 
 import { encodeKeyForPty } from "./encodeKeyForPty.ts";
+import { KittyKeyboardFlags } from "./kittyKeyboard.ts";
 
 // wheelDirection ("up"|"down"|"left"|"right") → семантический action поверхности.
 // Ключи типизированы точно (WheelDirection, а не string) — индексация тотальна,
@@ -105,10 +106,13 @@ export class TerminalViewElement extends TUIElement {
     /**
      * Байты, которые виджет отправит в PTY на это нажатие, или "" — клавишу он не возьмёт.
      * Хост спрашивает его, решая, отдавать ли сочетание терминалу или своим биндам: режим
-     * кодирования (DECCKM поверхности) у ответа тот же, что у самого виджета.
+     * кодирования (DECCKM и флаги kitty поверхности) у ответа тот же, что у самого виджета.
      */
     public encodeKey(event: TUIKeyboardEvent): string {
-        return encodeKeyForPty(event, { applicationCursorKeys: this.surface.applicationCursorKeys });
+        return encodeKeyForPty(event, {
+            applicationCursorKeys: this.surface.applicationCursorKeys,
+            kittyKeyboardFlags: this.surface.kittyKeyboardFlags,
+        });
     }
 
     /** Рвёт подписки на поверхность. Вызывается владельцем виджета (контроллером). */
@@ -185,12 +189,17 @@ export class TerminalViewElement extends TUIElement {
             this.surface.write((event as TUIPasteEvent).text);
             return;
         }
-        if (event.type === "keydown") {
+        // Отпускание программа получает только по kitty-протоколу с флагом 2 (типы событий), и
+        // только от хоста, который сам присылает keyup (внешний терминал с kitty).
+        const isKeyup =
+            event.type === "keyup" && (this.surface.kittyKeyboardFlags & KittyKeyboardFlags.ReportEventTypes) !== 0;
+        if (event.type === "keydown" || isKeyup) {
             const key = event as TUIKeyboardEvent;
             // Shift+PageUp/PageDown — клавиатурный аналог колеса: листаем скролбэк
-            // страницами, в PTY эти сочетания не уходят.
+            // страницами, в PTY эти сочетания не уходят (и их отпускание тоже).
             if (key.shiftKey && (key.key === "PageUp" || key.key === "PageDown")) {
                 event.preventDefault();
+                if (isKeyup) return;
                 const page = Math.max(1, this.layoutSize.height - 1);
                 this.surface.scrollLines(key.key === "PageUp" ? -page : page);
                 return;

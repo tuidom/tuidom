@@ -44,6 +44,8 @@ export class FakeTerminalSurface implements ITerminalSurface, IDisposable {
     public mouseEventsActive = false;
     /** Включила ли «программа в шелле» application cursor keys (DECCKM). */
     public applicationCursorKeys = false;
+    /** Флаги kitty keyboard protocol, которые включила «программа в шелле». */
+    public kittyKeyboardFlags = 0;
     /** Сколько строк истории лежит выше вьюпорта: потолок для `scrollLines`. */
     public scrollbackLines = 0;
     public scrollOffset = 0;
