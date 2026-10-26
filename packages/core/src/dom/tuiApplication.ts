@@ -256,6 +256,9 @@ export class TuiApplication {
     private handleMouse(token: MouseToken): void {
         if (this.root) {
             this.mouseDispatcher.handleMouseToken(token, this.root);
+            // Every mouse token, not only moves: a release off a captor drops its shape at once.
+            // The backend writes only changes.
+            this.backend.setPointerShape(this.mouseDispatcher.pointerShape);
             this.renderAfterInput();
         }
     }

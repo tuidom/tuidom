@@ -34,6 +34,7 @@ export class MockTerminalBackend implements ITerminalBackend {
 
     public size: Size;
     private readonly inputParser = new KeyInputParser();
+    private currentPointerShape = "default";
 
     public constructor(size: Size = new Size(80, 24)) {
         this.size = size;
@@ -146,6 +147,16 @@ export class MockTerminalBackend implements ITerminalBackend {
 
     public teardown(): void {
         // No-op for mock
+    }
+
+    /** Remembers the shape instead of drawing it — read it back with {@link pointerShape}. */
+    public setPointerShape(shape: string): void {
+        this.currentPointerShape = shape;
+    }
+
+    /** The last shape the application set (`"default"` until the first mouse event). */
+    public get pointerShape(): string {
+        return this.currentPointerShape;
     }
 
     // ─── Test helpers ───

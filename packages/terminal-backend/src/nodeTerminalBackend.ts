@@ -56,6 +56,15 @@ const TITLE_PUSH = "\x1b[22;0t";
 const TITLE_POP = "\x1b[23;0t";
 
 /**
+ * OSC 22 — set the mouse pointer shape to a CSS cursor name (kitty's pointer-shapes
+ * protocol: kitty, Ghostty, foot, iTerm2, xterm). Terminals without it drop the
+ * sequence. tmux doesn't know it, so it goes through passthrough.
+ */
+function pointerShapeSequence(shape: string): string {
+    return `\x1b]22;${shape}\x1b\\`;
+}
+
+/**
  * Color-scheme reports (DEC private mode 2031, the Contour protocol): with the mode on the
  * terminal sends `CSI ? 997 ; 1|2 n` whenever its scheme flips; `CSI ? 996 n` asks for the
  * current one right away. Direct, per-pane: tmux ≥ 3.6 tracks the mode itself and reports
@@ -193,6 +202,8 @@ export class NodeTerminalBackend implements ITerminalBackend {
     private cleanupHandlers: (() => void)[] = [];
     /** The title stack got a push from {@link setWindowTitle}; teardown owes it a pop. */
     private titlePushed = false;
+    /** The pointer shape the terminal shows; teardown owes it a reset when not `"default"`. */
+    private pointerShape = "default";
     private readonly isTmux: boolean;
     private readonly isGnuScreen: boolean;
     private readonly inputParser = new KeyInputParser();
@@ -264,6 +275,17 @@ export class NodeTerminalBackend implements ITerminalBackend {
             this.titlePushed = true;
         }
         this.writeDirect(windowTitleSequence(title));
+    }
+
+    /**
+     * Set the mouse pointer shape (OSC 22). Writes only when the shape changes, so a run
+     * that never leaves `"default"` writes nothing. Not under GNU Screen: it has no
+     * passthrough the way tmux does.
+     */
+    public setPointerShape(shape: string): void {
+        if (shape === this.pointerShape || this.isGnuScreen) return;
+        this.writePassthrough(pointerShapeSequence(shape));
+        this.pointerShape = shape;
     }
 
     public onInput(callback: (event: KeyPressEvent) => void): void {
@@ -584,6 +606,8 @@ export class NodeTerminalBackend implements ITerminalBackend {
             this.writeDirect(COLOR_SCHEME_REPORTS_DISABLE);
             this.colorSchemeReportsOn = false;
         }
+        // Bring back the default pointer, or the shell keeps the last one (a resize arrow).
+        this.setPointerShape("default");
         // Restore cursor
         this.stdout.write("\x1b[?25h");
         // Restore normal screen buffer
