@@ -311,8 +311,8 @@ the drag even when the cursor leaves its bounds.
 **Pointer shape.** `element.pointerShape` is the CSS `cursor` analogue: a CSS
 cursor name (`"ew-resize"`, `"pointer"`, `"text"`), `null` (the default)
 inherits the parent's, no shape on the chain means `"default"`. After every
-mouse event the app resolves the shape under the pointer — or the captor's,
-for the whole drag — and the backend writes OSC 22 only when it changes
+mouse event the app resolves the shape under the pointer — or, while a button
+is held, the shape of the element it was pressed on — and the backend writes OSC 22 only when it changes
 (through passthrough inside tmux, which needs `allow-passthrough on`).
 Terminals without OSC 22 (VTE, Alacritty) ignore it. `SashElement` sets
 `ew-resize` / `ns-resize`. Known limitation: once the pointer leaves the

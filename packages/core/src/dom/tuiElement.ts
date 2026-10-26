@@ -280,8 +280,8 @@ export class TUIElement {
     /**
      * Mouse pointer shape over this element — a CSS cursor name (`"ew-resize"`, `"pointer"`),
      * the analogue of CSS `cursor`. `null` inherits the parent's; with no shape on the whole
-     * chain the pointer is `"default"`. While the element holds pointer capture its shape
-     * stays even when the pointer leaves it. Resolved by `MouseEventDispatcher.pointerShape`.
+     * chain the pointer is `"default"`. While a button pressed on the element is held, its
+     * shape stays even when the pointer leaves it. Resolved by `MouseEventDispatcher.pointerShape`.
      */
     public pointerShape: string | null = null;
 
