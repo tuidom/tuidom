@@ -1,4 +1,5 @@
 import { DEFAULT_COLOR } from "../common/colorUtils.ts";
+import type { CursorStyle } from "../common/cursorStyle.ts";
 import type { Point } from "../common/geometryPromitives.ts";
 
 import type { Grid } from "./grid.ts";
@@ -26,11 +27,13 @@ export interface GridSnapshot {
     cols: number;
     rows: number;
     cursor: { x: number; y: number } | null;
+    /** Shape of {@link cursor} (DECSCUSR); `null` — the terminal's default, or no cursor. */
+    cursorStyle: CursorStyle | null;
     cells: CellSnapshot[];
 }
 
-/** Freeze the current state of `grid` (plus cursor) into a {@link GridSnapshot}. */
-export function snapshotGrid(grid: Grid, cursor: Point | null): GridSnapshot {
+/** Freeze the current state of `grid` (plus cursor and its shape) into a {@link GridSnapshot}. */
+export function snapshotGrid(grid: Grid, cursor: Point | null, cursorStyle: CursorStyle | null = null): GridSnapshot {
     const { width: cols, height: rows } = grid;
     const cells: CellSnapshot[] = new Array<CellSnapshot>(cols * rows);
     for (let y = 0; y < rows; y++) {
@@ -49,6 +52,10 @@ export function snapshotGrid(grid: Grid, cursor: Point | null): GridSnapshot {
         cols,
         rows,
         cursor: cursor === null ? null : { x: cursor.x, y: cursor.y },
+        cursorStyle:
+            cursor === null || cursorStyle === null
+                ? null
+                : { shape: cursorStyle.shape, blinking: cursorStyle.blinking },
         cells,
     };
 }
@@ -59,5 +66,5 @@ export function emptyGridSnapshot(cols: number, rows: number): GridSnapshot {
     for (let i = 0; i < cells.length; i++) {
         cells[i] = { char: " ", fg: DEFAULT_COLOR, bg: DEFAULT_COLOR, style: 0, width: 1 };
     }
-    return { cols, rows, cursor: null, cells };
+    return { cols, rows, cursor: null, cursorStyle: null, cells };
 }

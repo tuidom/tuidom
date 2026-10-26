@@ -1,5 +1,6 @@
 import type { ITerminalBackend } from "../backend/iTerminalBackend.ts";
 import { DEFAULT_COLOR } from "../common/colorUtils.ts";
+import type { CursorStyle } from "../common/cursorStyle.ts";
 import { Point, type Rect, Size } from "../common/geometryPromitives.ts";
 import { StyleFlags } from "../common/styleFlags.ts";
 
@@ -10,6 +11,8 @@ export class TerminalScreen {
     private grid: Grid;
     public size: Size;
     public cursorPosition: Point | null = null;
+    /** Shape of the cursor at {@link cursorPosition}; `null` — the terminal's default. Lives and dies with the position. */
+    public cursorStyle: CursorStyle | null = null;
 
     public get width(): number {
         return this.size.width;
@@ -23,12 +26,14 @@ export class TerminalScreen {
         this.grid = new Grid(size);
     }
 
-    public setCursorPosition(position: Point): void {
+    public setCursorPosition(position: Point, style: CursorStyle | null = null): void {
         this.cursorPosition = position;
+        this.cursorStyle = style;
     }
 
     public clearCursorPosition(): void {
         this.cursorPosition = null;
+        this.cursorStyle = null;
     }
 
     public setCell(position: Point, cell: CellPatch): void {
@@ -40,12 +45,12 @@ export class TerminalScreen {
     }
 
     public flush(backend: ITerminalBackend): void {
-        backend.renderFrame(this.grid, this.cursorPosition);
+        backend.renderFrame(this.grid, this.cursorPosition, this.cursorStyle);
     }
 
     public clear(): void {
         this.grid.fill(" ", DEFAULT_COLOR, DEFAULT_COLOR, StyleFlags.None);
-        this.cursorPosition = null;
+        this.clearCursorPosition();
     }
 
     /**

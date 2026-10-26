@@ -1,3 +1,4 @@
+import type { CursorStyle } from "../common/cursorStyle.ts";
 import type { Point, Size } from "../common/geometryPromitives.ts";
 import type { KeyPressEvent } from "../input/keyEvent.ts";
 import type { MouseToken } from "../input/rawTerminalToken.ts";
@@ -87,10 +88,11 @@ export interface ITerminalBackend {
     onColorSchemeChange(callback: (scheme: HostColorScheme) => void): void;
 
     /**
-     * Render a frame: receive the current grid and cursor position.
+     * Render a frame: receive the current grid, cursor position and cursor shape
+     * (`null` — the terminal's default shape; meaningless while the position is `null`).
      * The backend decides how to output it (ANSI diffing, simple copy, etc.).
      */
-    renderFrame(grid: Grid, cursorPosition: Point | null): void;
+    renderFrame(grid: Grid, cursorPosition: Point | null, cursorStyle?: CursorStyle | null): void;
 
     /**
      * Set the mouse pointer shape — a CSS cursor name (`"default"`, `"ew-resize"`,

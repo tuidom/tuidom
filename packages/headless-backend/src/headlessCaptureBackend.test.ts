@@ -115,6 +115,13 @@ describe("HeadlessCaptureBackend", () => {
         expect(tokens[0]).toMatchObject({ action: "scroll-down", button: "none" });
     });
 
+    it("captures the cursor shape next to the cursor", () => {
+        const backend = new HeadlessCaptureBackend(new Size(4, 1));
+        backend.renderFrame(new Grid(new Size(4, 1)), new Point(2, 0), { shape: "bar", blinking: true });
+
+        expect(backend.captureFrame().cursorStyle).toEqual({ shape: "bar", blinking: true });
+    });
+
     it("captures a rendered frame with char, colours, style and width", () => {
         const backend = new HeadlessCaptureBackend(new Size(4, 1));
         const grid = new Grid(new Size(4, 1));
@@ -127,6 +134,7 @@ describe("HeadlessCaptureBackend", () => {
         const frame = backend.captureFrame();
 
         expect(frame.cursor).toEqual({ x: 2, y: 0 });
+        expect(frame.cursorStyle).toBeNull();
         expect(frame.cells[0]).toEqual({
             char: "A",
             fg,

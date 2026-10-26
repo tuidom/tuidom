@@ -1,5 +1,6 @@
 import type { HostColorScheme, HostTerminalColors, ITerminalBackend } from "@tuidom/core/backend/iTerminalBackend";
 import { parseXColor } from "@tuidom/core/common/colorUtils";
+import { type CursorStyle, sameCursorStyle } from "@tuidom/core/common/cursorStyle";
 import { Point, Size } from "@tuidom/core/common/geometryPromitives";
 import type { KeyPressEvent } from "@tuidom/core/input/keyEvent";
 import { KeyInputParser } from "@tuidom/core/input/keyInputParser";
@@ -62,6 +63,17 @@ const TITLE_POP = "\x1b[23;0t";
  */
 function pointerShapeSequence(shape: string): string {
     return `\x1b]22;${shape}\x1b\\`;
+}
+
+/**
+ * DECSCUSR (`CSI n q`) — the text cursor shape: 1/2 block, 3/4 underline, 5/6 bar (odd
+ * blinks, even is steady), 0 the terminal's default. tmux understands it and keeps it per
+ * pane, so it goes directly; terminals without it drop the sequence.
+ */
+function cursorStyleSequence(style: CursorStyle | null): string {
+    if (style === null) return "\x1b[0 q";
+    const base = style.shape === "block" ? 1 : style.shape === "underline" ? 3 : 5;
+    return `\x1b[${(style.blinking ? base : base + 1).toString()} q`;
 }
 
 /**
@@ -216,6 +228,10 @@ export class NodeTerminalBackend implements ITerminalBackend {
     private readonly frameBuffer = new StringSink();
     private prevGrid: Grid | null = null;
     private prevCursorPosition: Point | null = null;
+    /** The cursor shape the terminal shows; `null` — its default, untouched until a frame asks otherwise. */
+    private prevCursorStyle: CursorStyle | null = null;
+    /** Some frame has set a non-default cursor shape; teardown owes the terminal a `CSI 0 q`. */
+    private cursorStyleTouched = false;
 
     public constructor(
         stdin: NodeJS.ReadStream = process.stdin,
@@ -475,7 +491,7 @@ export class NodeTerminalBackend implements ITerminalBackend {
         }
     }
 
-    public renderFrame(grid: Grid, cursorPosition: Point | null): void {
+    public renderFrame(grid: Grid, cursorPosition: Point | null, cursorStyle: CursorStyle | null = null): void {
         this.prevGrid ??= new Grid(grid.size);
         const sizeChanged = this.prevGrid.width !== grid.width || this.prevGrid.height !== grid.height;
         if (sizeChanged) {
@@ -488,11 +504,14 @@ export class NodeTerminalBackend implements ITerminalBackend {
         const body = this.frameBuffer.value;
 
         const cursorChanged = !samePoint(cursorPosition, this.prevCursorPosition);
+        // The shape of a hidden cursor doesn't matter: the terminal keeps the last one until
+        // the cursor shows again, so a frame without a cursor never writes a shape.
+        const styleChanged = cursorPosition !== null && !sameCursorStyle(cursorStyle, this.prevCursorStyle);
 
         // Nothing to repaint and the cursor hasn't moved → emit absolutely nothing.
         // Without this, every mouse-move event re-sent the frame wrapper (hide/show
         // cursor + reposition), making the terminal cursor flicker on plain motion.
-        if (!sizeChanged && body.length === 0 && !cursorChanged) {
+        if (!sizeChanged && body.length === 0 && !cursorChanged && !styleChanged) {
             return;
         }
 
@@ -505,6 +524,11 @@ export class NodeTerminalBackend implements ITerminalBackend {
             out += "\x1b[?25l"; // hide cursor
         }
         out += body;
+        if (styleChanged) {
+            out += cursorStyleSequence(cursorStyle);
+            this.prevCursorStyle = cursorStyle;
+            if (cursorStyle !== null) this.cursorStyleTouched = true;
+        }
         if (cursorPosition !== null) {
             out += `\x1b[${(cursorPosition.y + 1).toString()};${(cursorPosition.x + 1).toString()}H`; // position cursor
             out += "\x1b[?25h"; // show cursor
@@ -608,6 +632,13 @@ export class NodeTerminalBackend implements ITerminalBackend {
         }
         // Bring back the default pointer, or the shell keeps the last one (a resize arrow).
         this.setPointerShape("default");
+        // Bring back the terminal's own cursor shape — only if a frame ever changed it, so a
+        // run that never set a shape leaves the byte stream as it was.
+        if (this.cursorStyleTouched) {
+            this.writeDirect(cursorStyleSequence(null));
+            this.prevCursorStyle = null;
+            this.cursorStyleTouched = false;
+        }
         // Restore cursor
         this.stdout.write("\x1b[?25h");
         // Restore normal screen buffer

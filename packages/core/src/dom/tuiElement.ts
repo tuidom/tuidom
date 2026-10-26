@@ -1,4 +1,5 @@
 import { compositeOver, isColorValue, TRANSPARENT_COLOR } from "../common/colorUtils.ts";
+import type { CursorStyle } from "../common/cursorStyle.ts";
 import { DisplayLine } from "../common/displayLine.ts";
 import { BoxConstraints, Offset, Point, Rect, Size } from "../common/geometryPromitives.ts";
 import { StyleFlags } from "../common/styleFlags.ts";
@@ -93,11 +94,16 @@ export class RenderContext {
         return this.canvas.getCell(new Point(screenX, screenY));
     }
 
-    public setCursorPosition(x: number, y: number): void {
+    /**
+     * Put the hardware cursor at (x, y). `style` is its shape (DECSCUSR); without one the
+     * cursor takes the terminal's default shape, so an element that doesn't care never
+     * inherits the shape another element set.
+     */
+    public setCursorPosition(x: number, y: number, style: CursorStyle | null = null): void {
         const screenX = x + this.offset.dx;
         const screenY = y + this.offset.dy;
         if (!this.clipRect.containsPoint(new Point(screenX, screenY))) return;
-        this.canvas.setCursorPosition(new Point(screenX, screenY));
+        this.canvas.setCursorPosition(new Point(screenX, screenY), style);
     }
 
     /**

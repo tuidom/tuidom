@@ -16,6 +16,7 @@ function snapshot(rows: CellSnapshot[][]): GridSnapshot {
         cols,
         rows: rows.length,
         cursor: null,
+        cursorStyle: null,
         cells: rows.flat(),
     };
 }

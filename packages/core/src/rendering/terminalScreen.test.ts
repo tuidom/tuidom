@@ -72,4 +72,31 @@ describe("TerminalScreen", () => {
             expect(screen.cursorPosition).toBeNull();
         });
     });
+
+    describe("cursor shape", () => {
+        const BAR = { shape: "bar", blinking: false } as const;
+
+        it("travels with the position to the backend; a position without one is the default", () => {
+            const screen = new TerminalScreen(new Size(5, 3));
+            const backend = new MockTerminalBackend(new Size(5, 3));
+            screen.setCursorPosition(new Point(1, 1), BAR);
+            screen.flush(backend);
+            expect(backend.cursorStyle).toEqual(BAR);
+
+            screen.setCursorPosition(new Point(2, 1));
+            screen.flush(backend);
+            expect(backend.cursorStyle).toBeNull();
+        });
+
+        it("clearCursorPosition and clear() drop it with the position", () => {
+            const screen = new TerminalScreen(new Size(5, 3));
+            screen.setCursorPosition(new Point(1, 1), BAR);
+            screen.clearCursorPosition();
+            expect(screen.cursorStyle).toBeNull();
+
+            screen.setCursorPosition(new Point(1, 1), BAR);
+            screen.clear();
+            expect(screen.cursorStyle).toBeNull();
+        });
+    });
 });

@@ -5,6 +5,7 @@ import {
     NO_HOST_COLORS,
 } from "@tuidom/core/backend/iTerminalBackend";
 import { DEFAULT_COLOR } from "@tuidom/core/common/colorUtils";
+import type { CursorStyle } from "@tuidom/core/common/cursorStyle";
 import { Point, Size } from "@tuidom/core/common/geometryPromitives";
 import type { KeyPressEvent } from "@tuidom/core/input/keyEvent";
 import { KeyInputParser } from "@tuidom/core/input/keyInputParser";
@@ -124,8 +125,10 @@ export class MockTerminalBackend implements ITerminalBackend {
     }
 
     public cursorPosition: Point = new Point(0, 0);
+    /** Cursor shape of the last frame; `null` — the terminal's default. */
+    public cursorStyle: CursorStyle | null = null;
 
-    public renderFrame(grid: Grid, cursorPosition: Point): void {
+    public renderFrame(grid: Grid, cursorPosition: Point, cursorStyle: CursorStyle | null = null): void {
         for (let y = 0; y < grid.height && y < this.size.height; y++) {
             for (let x = 0; x < grid.width && x < this.size.width; x++) {
                 const cell = grid.getCellAt(x, y);
@@ -135,6 +138,7 @@ export class MockTerminalBackend implements ITerminalBackend {
             }
         }
         this.cursorPosition = cursorPosition;
+        this.cursorStyle = cursorStyle;
     }
 
     public getSize(): Size {
