@@ -319,6 +319,16 @@ Terminals without OSC 22 (VTE, Alacritty) ignore it. `SashElement` sets
 window or the tmux pane the app gets no events, so the last shape stays until
 the pointer comes back.
 
+**Text cursor shape.** `context.setCursorPosition(x, y, style)` places the
+hardware cursor and, optionally, its shape: `{ shape: "block" | "underline" |
+"bar", blinking }` (DECSCUSR, `CSI n q`). Without a style the cursor takes the
+terminal's own default shape, so an input next to an editor with a bar cursor
+gets the user's terminal shape back on focus. The backend writes the sequence
+only when the shape changes (directly, tmux tracks it per pane); a run that
+never sets a shape writes nothing, and `teardown` sends `CSI 0 q` only if some
+frame changed it. The headless backend keeps it in the frame snapshot as
+`cursorStyle`. Terminals without DECSCUSR ignore it.
+
 **Context menu.** Right click, the ContextMenu key and Shift+F10 are unified
 into a single `contextmenu` event with a normalized anchor.
 

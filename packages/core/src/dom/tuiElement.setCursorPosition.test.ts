@@ -34,4 +34,15 @@ describe("RenderContext.setCursorPosition — clipping", () => {
 
         expect(screen.cursorPosition).toEqual(new Point(2, 2));
     });
+
+    it("passes the shape along; without one the cursor takes the terminal's default", () => {
+        const screen = new TerminalScreen(new Size(10, 5));
+        const ctx = new RenderContext(screen, new Offset(0, 0), new Rect(new Point(0, 0), new Size(4, 4)));
+
+        ctx.setCursorPosition(1, 2, { shape: "block", blinking: false });
+        expect(screen.cursorStyle).toEqual({ shape: "block", blinking: false });
+
+        ctx.setCursorPosition(1, 2);
+        expect(screen.cursorStyle).toBeNull();
+    });
 });

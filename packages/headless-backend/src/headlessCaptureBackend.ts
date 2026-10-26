@@ -4,6 +4,7 @@ import {
     type ITerminalBackend,
     NO_HOST_COLORS,
 } from "@tuidom/core/backend/iTerminalBackend";
+import type { CursorStyle } from "@tuidom/core/common/cursorStyle";
 import { Point, Size } from "@tuidom/core/common/geometryPromitives";
 import type { KeyPressEvent } from "@tuidom/core/input/keyEvent";
 import { KeyInputParser } from "@tuidom/core/input/keyInputParser";
@@ -117,8 +118,8 @@ export class HeadlessCaptureBackend implements ITerminalBackend {
         for (const cb of this.colorSchemeCallbacks) cb(scheme);
     }
 
-    public renderFrame(grid: Grid, cursorPosition: Point | null): void {
-        this.lastFrame = snapshotGrid(grid, cursorPosition);
+    public renderFrame(grid: Grid, cursorPosition: Point | null, cursorStyle: CursorStyle | null = null): void {
+        this.lastFrame = snapshotGrid(grid, cursorPosition, cursorStyle);
     }
 
     public getSize(): Size {
