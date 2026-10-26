@@ -277,6 +277,14 @@ export class TUIElement {
     // routes subsequent move/release events here even if the cursor leaves its bounds.
     public capturesPointer = false;
 
+    /**
+     * Mouse pointer shape over this element — a CSS cursor name (`"ew-resize"`, `"pointer"`),
+     * the analogue of CSS `cursor`. `null` inherits the parent's; with no shape on the whole
+     * chain the pointer is `"default"`. While the element holds pointer capture its shape
+     * stays even when the pointer leaves it. Resolved by `MouseEventDispatcher.pointerShape`.
+     */
+    public pointerShape: string | null = null;
+
     // Coordinate system
     public localPosition: Offset = new Offset(0, 0);
     public isLayoutDirty = true;

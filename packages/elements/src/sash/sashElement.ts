@@ -19,7 +19,8 @@ export type SashOrientation = "vertical" | "horizontal";
  *
  * It is invisible at rest. On hover — after {@link hoverDelay} so a passing cursor does
  * not flash it — it paints a thin line along the boundary so the user can tell it is
- * draggable. The line also stays lit for the duration of a drag.
+ * draggable. The line also stays lit for the duration of a drag. The mouse pointer turns
+ * into a resize arrow ({@link pointerShape}) over it and for the whole drag.
  */
 export class SashElement extends TUIElement {
     public onDrag?: (boundaryScreen: number) => void;
@@ -38,6 +39,9 @@ export class SashElement extends TUIElement {
         super();
         this.orientation = orientation;
         this.capturesPointer = true;
+        // vscode's sash.css: ew-resize/ns-resize (col-/row-resize only on macOS — not in kitty's
+        // list of names). A hidden sash takes no hits, so it gives no shape either.
+        this.pointerShape = orientation === "vertical" ? "ew-resize" : "ns-resize";
         // Keep focusable = false so mousedown does not steal focus from the file tree.
 
         this.addEventListener("mousedown", (event) => {

@@ -92,6 +92,16 @@ export interface ITerminalBackend {
      */
     renderFrame(grid: Grid, cursorPosition: Point | null): void;
 
+    /**
+     * Set the mouse pointer shape — a CSS cursor name (`"default"`, `"ew-resize"`,
+     * `"ns-resize"`, …; OSC 22, kitty's pointer-shapes protocol). The application calls it
+     * after every mouse event with the shape resolved for the element under the pointer;
+     * the backend writes only changes and {@link teardown} brings back `"default"`.
+     * Terminals without OSC 22 ignore it. Leaving the window delivers no events, so the
+     * last shape stays until the pointer comes back.
+     */
+    setPointerShape(shape: string): void;
+
     /** Current terminal dimensions */
     getSize(): Size;
 

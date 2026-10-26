@@ -15,6 +15,13 @@ describe("HeadlessCaptureBackend", () => {
         expect(backend.getSize()).toEqual(new Size(100, 40));
     });
 
+    it("remembers the last pointer shape, default before any", () => {
+        const backend = new HeadlessCaptureBackend();
+        expect(backend.pointerShape).toBe("default");
+        backend.setPointerShape("ew-resize");
+        expect(backend.pointerShape).toBe("ew-resize");
+    });
+
     it("defaults to 120x32", () => {
         expect(new HeadlessCaptureBackend().getSize()).toEqual(new Size(120, 32));
     });

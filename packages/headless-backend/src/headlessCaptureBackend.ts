@@ -34,6 +34,7 @@ export class HeadlessCaptureBackend implements ITerminalBackend {
     private readonly resizeCallbacks: ((size: Size) => void)[] = [];
     private readonly oscResponseCallbacks: ((code: number, data: string) => void)[] = [];
     private readonly inputParser = new KeyInputParser();
+    private currentPointerShape = "default";
 
     private size: Size;
     private lastFrame: GridSnapshot;
@@ -130,6 +131,16 @@ export class HeadlessCaptureBackend implements ITerminalBackend {
 
     public teardown(): void {
         // No terminal to restore.
+    }
+
+    /** Remembers the shape instead of drawing it — read it back with {@link pointerShape}. */
+    public setPointerShape(shape: string): void {
+        this.currentPointerShape = shape;
+    }
+
+    /** The last shape the application set (`"default"` until the first mouse event). */
+    public get pointerShape(): string {
+        return this.currentPointerShape;
     }
 
     /** The window title has no window to go to in headless mode. */

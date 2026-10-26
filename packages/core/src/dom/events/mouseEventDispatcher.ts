@@ -16,6 +16,9 @@ export class MouseEventDispatcher {
     private lastClickTarget: TUIElement | null = null;
     private lastClickPosition: Point | null = null;
     private lastPosition: Point | null = null;
+    // Element under the pointer at the last token — unlike hoveredElement, also updated
+    // by press/release and during capture, so a release off the captor resolves at once.
+    private lastTarget: TUIElement | null = null;
 
     private now: () => number;
 
@@ -48,6 +51,23 @@ export class MouseEventDispatcher {
         }
 
         this.lastPosition = point;
+        this.lastTarget = target;
+    }
+
+    /**
+     * The pointer shape for the last handled token: the captor's while a button is held
+     * on an element with pointer capture (even off its bounds), otherwise the first
+     * non-null {@link TUIElement.pointerShape} from the element under the pointer up to
+     * the root; `"default"` when nobody on the chain sets one. A modal overlay takes the
+     * point itself, so whatever lies behind it gives no shape.
+     */
+    public get pointerShape(): string {
+        let element = this.isCapturing() ? this.pressedElement : this.lastTarget;
+        while (element !== null) {
+            if (element.pointerShape !== null) return element.pointerShape;
+            element = element.getParent();
+        }
+        return "default";
     }
 
     private handlePress(target: TUIElement | null, token: MouseToken, screenX: number, screenY: number): void {
