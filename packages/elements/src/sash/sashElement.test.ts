@@ -1,5 +1,9 @@
+import { packRgb } from "@tuidom/core/common/colorUtils";
 import { BoxConstraints, Offset, Point, Rect, Size } from "@tuidom/core/common/geometryPromitives";
 import { MouseEventDispatcher } from "@tuidom/core/dom/events/mouseEventDispatcher";
+import { TUIMouseEvent } from "@tuidom/core/dom/events/tuiMouseEvent";
+import { STYLE_TOKEN_DEFAULTS } from "@tuidom/core/dom/styles/styleTokens";
+import { ROOT_STYLE_CONTEXT } from "@tuidom/core/dom/styles/tuiStyle";
 import { RenderContext, TUIElement } from "@tuidom/core/dom/tuiElement";
 import type { MouseToken } from "@tuidom/core/input/rawTerminalToken";
 import { TerminalScreen } from "@tuidom/core/rendering/terminalScreen";
@@ -55,6 +59,27 @@ function renderTopChar(sash: SashElement): string {
     sash.render(new RenderContext(termScreen, new Offset(0, 0), new Rect(new Point(0, 0), size)));
     termScreen.flush(backend);
     return backend.getTextAt(new Point(0, 0), 1);
+}
+
+/** Render the sash standalone and return the glyph and foreground of its top cell. */
+function renderTopCell(sash: SashElement): { char: string; fg: number } {
+    const size = new Size(2, 3);
+    const backend = new MockTerminalBackend(size);
+    const termScreen = new TerminalScreen(size);
+    sash.render(new RenderContext(termScreen, new Offset(0, 0), new Rect(new Point(0, 0), size)));
+    termScreen.flush(backend);
+    return { char: backend.getTextAt(new Point(0, 0), 1), fg: backend.getFgAt(new Point(0, 0)) };
+}
+
+const REST_COLOR = packRgb(68, 68, 68);
+
+/** {@link buildScene} with a rest color token resolved into the sash's var scope. */
+function buildRestScene(): { root: ContainerElement; sash: SashElement } {
+    const scene = buildScene();
+    scene.root.setStyleVars({ "test.separator": REST_COLOR });
+    scene.root.performStyleResolution(ROOT_STYLE_CONTEXT);
+    scene.sash.restColorVar = "test.separator";
+    return scene;
 }
 
 describe("SashElement", () => {
@@ -155,6 +180,23 @@ describe("SashElement", () => {
         expect(renderTopChar(sash)).toBe(" ");
     });
 
+    it("asks for a repaint when a drag starts and ends, so the line color follows it", () => {
+        const { root, sash } = buildScene();
+        const dispatcher = new MouseEventDispatcher();
+        const repaints = vi.spyOn(sash, "markDirty");
+
+        // A stray release with no drag in progress changes nothing.
+        sash.dispatchEvent(
+            new TUIMouseEvent("mouseup", { button: "left", screenX: 30, screenY: 0, localX: 0, localY: 0 }),
+        );
+        expect(repaints).not.toHaveBeenCalled();
+
+        dispatcher.handleMouseToken(makeToken({ action: "press", x: 31, y: 1 }), root);
+        expect(repaints).toHaveBeenCalledTimes(1);
+        dispatcher.handleMouseToken(makeToken({ action: "release", x: 31, y: 1 }), root);
+        expect(repaints).toHaveBeenCalledTimes(2);
+    });
+
     it("cancels the pending hover timer when the cursor leaves before the delay", () => {
         vi.useFakeTimers();
         const { root, sash } = buildScene();
@@ -218,6 +260,51 @@ describe("SashElement", () => {
         expect(renderTopChar(sash)).toBe("│");
     });
 
+    describe("rest color", () => {
+        it("is off by default", () => {
+            expect(new SashElement().restColorVar).toBeNull();
+        });
+
+        it("draws the line at rest in the rest color", () => {
+            const { sash } = buildRestScene();
+            expect(renderTopCell(sash)).toEqual({ char: "│", fg: REST_COLOR });
+        });
+
+        it("hover repaints the line in sash.hoverBorder and leaving restores the rest color", () => {
+            vi.useFakeTimers();
+            const { root, sash } = buildRestScene();
+            const dispatcher = new MouseEventDispatcher();
+
+            dispatcher.handleMouseToken(makeToken({ action: "move", x: 31, y: 1 }), root);
+            expect(renderTopCell(sash).fg).toBe(REST_COLOR);
+            vi.advanceTimersByTime(300);
+            expect(renderTopCell(sash)).toEqual({ char: "│", fg: STYLE_TOKEN_DEFAULTS["sash.hoverBorder"] });
+
+            dispatcher.handleMouseToken(makeToken({ action: "move", x: 50, y: 1 }), root);
+            expect(renderTopCell(sash)).toEqual({ char: "│", fg: REST_COLOR });
+        });
+
+        it("drag repaints the line in sash.hoverBorder until release", () => {
+            const { root, sash } = buildRestScene();
+            const dispatcher = new MouseEventDispatcher();
+
+            dispatcher.handleMouseToken(makeToken({ action: "press", x: 31, y: 1 }), root);
+            expect(renderTopCell(sash).fg).toBe(STYLE_TOKEN_DEFAULTS["sash.hoverBorder"]);
+            dispatcher.handleMouseToken(makeToken({ action: "release", x: 31, y: 1 }), root);
+            expect(renderTopCell(sash).fg).toBe(REST_COLOR);
+        });
+
+        it("asks for a repaint on change and ignores a repeated value", () => {
+            const { sash } = buildRestScene();
+            const repaints = vi.spyOn(sash, "markDirty");
+            sash.restColorVar = "test.separator";
+            expect(repaints).not.toHaveBeenCalled();
+            sash.restColorVar = null;
+            expect(repaints).toHaveBeenCalledTimes(1);
+            expect(renderTopCell(sash).char).toBe(" ");
+        });
+    });
+
     describe("horizontal orientation", () => {
         /** A horizontal sash at screenY=10 spanning an 80-wide root, with a drag log. */
         function buildHScene(): { root: ContainerElement; sash: SashElement; drags: number[] } {
@@ -255,6 +342,14 @@ describe("SashElement", () => {
             dispatcher.handleMouseToken(makeToken({ action: "move", x: 5, y: 11 }), root);
             vi.advanceTimersByTime(300);
             expect(renderTopChar(sash)).toBe("─");
+        });
+
+        it("draws a horizontal line at rest in the rest color", () => {
+            const { root, sash } = buildHScene();
+            root.setStyleVars({ "test.separator": REST_COLOR });
+            root.performStyleResolution(ROOT_STYLE_CONTEXT);
+            sash.restColorVar = "test.separator";
+            expect(renderTopCell(sash)).toEqual({ char: "─", fg: REST_COLOR });
         });
     });
 });

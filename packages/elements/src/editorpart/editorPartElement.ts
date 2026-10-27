@@ -22,6 +22,12 @@ export const MIN_GROUP_MAIN_ROWS = 5;
  * табы, и наложение отняло бы у них мышь, а нижняя строка редактора менее
  * ценна. Каждый саш укладывается явно в каждом layout.
  *
+ * С {@link separatorColorVar} граница — отдельная клетка (аналог
+ * `separatorBorder` grid-а VS Code; в терминале линия не тоньше клетки): между
+ * группами своя колонка `│` или строка `─` этим цветом, саш лежит ровно на
+ * ней и не перекрывает группы. Каждая граница отнимает клетку основного
+ * размера; доли и минимумы — без клеток разделителей.
+ *
  * Деградация «не влезаем»: контейнер уже, чем N×минимум, — display-only равное
  * деление без мутации весов; при возврате размера пропорции восстанавливаются.
  * Отказ в НОВОМ сплите при нехватке места — {@link canFit}, решает владелец.
@@ -33,6 +39,7 @@ export class EditorPartElement extends TUIElement {
     private sashes: SashElement[] = [];
     private orientationValue: EditorPartOrientation = "columns";
     private maximizedIndexValue: number | null = null;
+    private separatorColorVarValue: string | null = null;
     /** Основные размеры групп из последнего layout — база для drag-математики. */
     private lastSizes: number[] = [];
 
@@ -51,6 +58,21 @@ export class EditorPartElement extends TUIElement {
         if (this.orientationValue === value) return;
         this.orientationValue = value;
         this.rebuildSashes();
+        this.markDirty();
+    }
+
+    /**
+     * Переменная стиля видимого разделителя групп, либо `null` (по умолчанию):
+     * саши невидимы в покое и лежат поверх граничной клетки группы.
+     */
+    public get separatorColorVar(): string | null {
+        return this.separatorColorVarValue;
+    }
+
+    public set separatorColorVar(value: string | null) {
+        if (this.separatorColorVarValue === value) return;
+        this.separatorColorVarValue = value;
+        for (const sash of this.sashes) sash.restColorVar = value;
         this.markDirty();
     }
 
@@ -129,7 +151,7 @@ export class EditorPartElement extends TUIElement {
         const main = this.mainAxisSize();
         // До первого layout судить не по чему — не отказываем (рестор решает сам).
         if (main <= 0) return true;
-        return count * this.minMainSize() <= main;
+        return count * this.minMainSize() + (count - 1) * this.separatorSize() <= main;
     }
 
     public override inspectState(): Record<string, unknown> {
@@ -144,6 +166,11 @@ export class EditorPartElement extends TUIElement {
     /** Основной размер полосы по текущей оси (из последнего layout). */
     private mainAxisSize(): number {
         return this.orientationValue === "columns" ? this.layoutSize.width : this.layoutSize.height;
+    }
+
+    /** Клеток основного размера на одну границу: 1 с видимым разделителем, иначе 0. */
+    private separatorSize(): number {
+        return this.separatorColorVarValue === null ? 0 : 1;
     }
 
     private minMainSize(): number {
@@ -171,6 +198,7 @@ export class EditorPartElement extends TUIElement {
         const sashOrientation = this.orientationValue === "columns" ? "vertical" : "horizontal";
         this.sashes = this.views.slice(1).map((_, i) => {
             const sash = new SashElement(sashOrientation);
+            sash.restColorVar = this.separatorColorVarValue;
             sash.onDrag = (boundaryScreen) => {
                 this.handleSashDrag(i, boundaryScreen);
             };
@@ -200,13 +228,16 @@ export class EditorPartElement extends TUIElement {
         const sizes = this.currentSizes();
         if (sizes === null) return;
         const origin = this.orientationValue === "columns" ? this.globalPosition.x : this.globalPosition.y;
+        const gap = this.separatorSize();
         let offset = 0;
-        for (let i = 0; i < index; i++) offset += sizes[i];
+        for (let i = 0; i < index; i++) offset += sizes[i] + gap;
         const min = this.minMainSize();
         const pair = sizes[index] + sizes[index + 1];
-        // В rows саш лежит на последней строке верхней группы (не на первой
-        // нижней) — курсор на строке Y означает размер верхней Y+1.
-        const inset = this.orientationValue === "rows" ? 1 : 0;
+        // Без разделителя в rows саш лежит на последней строке верхней группы
+        // (не на первой нижней) — курсор на строке Y означает размер верхней
+        // Y+1. С разделителем саш — своя клетка сразу за группой: курсор на X
+        // ставит разделитель на X.
+        const inset = gap === 0 && this.orientationValue === "rows" ? 1 : 0;
         const target = Math.max(min, Math.min(boundaryScreen - origin - offset + inset, pair - min));
         sizes[index] = target;
         sizes[index + 1] = pair - target;
@@ -279,8 +310,9 @@ export class EditorPartElement extends TUIElement {
         }
 
         const columns = this.orientationValue === "columns";
+        const gap = this.separatorSize();
         const mainSize = columns ? containerSize.width : containerSize.height;
-        const sizes = this.computeSizes(mainSize);
+        const sizes = this.computeSizes(Math.max(0, mainSize - this.sashes.length * gap));
         this.lastSizes = [...sizes];
 
         let offset = 0;
@@ -289,14 +321,15 @@ export class EditorPartElement extends TUIElement {
             this.layoutChild(view, columns ? offset : 0, columns ? 0 : offset, BoxConstraints.tight(size));
             offset += sizes[i];
 
-            // Саш i на границе групп i/i+1: в columns — поверх первой колонки
-            // следующей группы, в rows — поверх последней строки предыдущей
-            // (первая строка нижней это её табы). Явная укладка каждый layout:
-            // ленивый layoutSize со старым боксом ломает hit-test (контракт
-            // SashElement, docs/LAYOUT.md).
+            // Саш i на границе групп i/i+1: с разделителем — на его собственной
+            // клетке; без — в columns поверх первой колонки следующей группы,
+            // в rows поверх последней строки предыдущей (первая строка нижней
+            // это её табы). Явная укладка каждый layout: ленивый layoutSize со
+            // старым боксом ломает hit-test (контракт SashElement, docs/LAYOUT.md).
             if (i < this.sashes.length) {
                 const sashSize = columns ? new Size(1, containerSize.height) : new Size(containerSize.width, 1);
-                const sashMain = columns ? offset : Math.max(0, offset - 1);
+                const sashMain = gap > 0 || columns ? offset : Math.max(0, offset - 1);
+                offset += gap;
                 this.layoutChild(
                     this.sashes[i],
                     columns ? sashMain : 0,

@@ -195,6 +195,10 @@ contract:
 lays it out on the boundary and turns the reported coordinate into a size.
 An IDE-like workbench shell is application-level and lives in the host
 (Diode), not in the engine.
+A sash is invisible at rest unless `restColorVar` names a style token: then
+it always draws its line in that color and switches to `sash.hoverBorder` on
+hover and drag. `EditorPartElement.separatorColorVar` turns this on between
+editor groups and gives each boundary a column (or row) of its own.
 
 ## Styling and themes
 
@@ -450,7 +454,7 @@ will be generated from source — see `docs/TODO/ApiReferenceGeneration.md`.
 | `BodyElement` | full-screen root: title, content slot, overlay layer |
 | `TitledPanelElement` | panel with a title row |
 | `EditorPartElement` / `EditorTabStripElement` / `EditorTabItemElement` | editor area with a tab strip |
-| `SashElement` | invisible draggable splitter |
+| `SashElement` | draggable splitter, invisible or a visible separator line |
 | `OverlayHostElement` | content + local overlay layer on top |
 | **Scrolling** | |
 | `ScrollViewport` | scroll engine: offsets and clips a scrollable child |

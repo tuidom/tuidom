@@ -17,7 +17,8 @@ export type SashOrientation = "vertical" | "horizontal";
  * via {@link onDrag} — screenX for a vertical sash, screenY for a horizontal one; the
  * owner clamps and applies the new size.
  *
- * It is invisible at rest. On hover — after {@link hoverDelay} so a passing cursor does
+ * It is invisible at rest unless {@link restColorVar} names a color: then the line is always
+ * drawn in that color (a visible separator, like vscode's `separatorBorder`). On hover — after {@link hoverDelay} so a passing cursor does
  * not flash it — it paints a thin line along the boundary so the user can tell it is
  * draggable. The line also stays lit for the duration of a drag. The mouse pointer turns
  * into a resize arrow ({@link pointerShape}) over it and for the whole drag.
@@ -33,6 +34,7 @@ export class SashElement extends TUIElement {
 
     private readonly orientation: SashOrientation;
     private dragging = false;
+    private restColorVarValue: string | null = null;
     private hoverTimer: ReturnType<typeof setTimeout> | null = null;
 
     public constructor(orientation: SashOrientation = "vertical") {
@@ -48,14 +50,14 @@ export class SashElement extends TUIElement {
             if (event.button !== "left") return;
             // Dragging lights the line immediately; no point waiting on the hover delay.
             this.clearHoverTimer();
-            this.dragging = true;
+            this.setDragging(true);
         });
         this.addEventListener("mousemove", (event) => {
             if (!this.dragging) return;
             this.onDrag?.(this.orientation === "vertical" ? event.screenX : event.screenY);
         });
         this.addEventListener("mouseup", () => {
-            this.dragging = false;
+            this.setDragging(false);
         });
         // Ядерное hover-состояние мгновенно, а сашу нужна задержка (мелькание
         // при пролёте курсора) — таймер остаётся, но результат выражается
@@ -77,6 +79,27 @@ export class SashElement extends TUIElement {
         });
     }
 
+    /**
+     * Style variable of the line drawn at rest, or `null` (the default) for an invisible sash.
+     * Hover and drag still paint `sash.hoverBorder` over it, with the same glyph.
+     */
+    public get restColorVar(): string | null {
+        return this.restColorVarValue;
+    }
+
+    public set restColorVar(value: string | null) {
+        if (this.restColorVarValue === value) return;
+        this.restColorVarValue = value;
+        this.markDirty();
+    }
+
+    /** The line color follows the drag, so a drag start or end needs a repaint of its own. */
+    private setDragging(value: boolean): void {
+        if (this.dragging === value) return;
+        this.dragging = value;
+        this.markDirty();
+    }
+
     private clearHoverTimer(): void {
         if (this.hoverTimer !== null) {
             clearTimeout(this.hoverTimer);
@@ -85,8 +108,10 @@ export class SashElement extends TUIElement {
     }
 
     public override render(context: RenderContext): void {
-        if (!(this.hasStyleState("lit") || this.dragging)) return;
-        const color = this.styleVar("sash.hoverBorder");
+        const lit = this.hasStyleState("lit") || this.dragging;
+        const colorVar = lit ? "sash.hoverBorder" : this.restColorVarValue;
+        if (colorVar === null) return;
+        const color = this.styleVar(colorVar);
         if (this.orientation === "vertical") {
             for (let y = 0; y < this.layoutSize.height; y++) {
                 context.setCell(0, y, { char: "│", fg: color });
