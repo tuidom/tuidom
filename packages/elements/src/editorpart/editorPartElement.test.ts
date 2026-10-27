@@ -3,7 +3,9 @@ import { TUIMouseEvent } from "@tuidom/core/dom/events/tuiMouseEvent";
 import { TUIElement } from "@tuidom/core/dom/tuiElement";
 import { describe, expect, it } from "vitest";
 
-import { EditorPartElement, MIN_GROUP_MAIN_COLS } from "./editorPartElement.ts";
+import { SashElement } from "../sash/sashElement.ts";
+
+import { EditorPartElement, MIN_GROUP_MAIN_COLS, MIN_GROUP_MAIN_ROWS } from "./editorPartElement.ts";
 
 function panels(count: number): TUIElement[] {
     return Array.from({ length: count }, () => new TUIElement());
@@ -376,6 +378,200 @@ describe("EditorPartElement", () => {
             weights: [0.25, 0.75],
             maximizedIndex: null,
             groupCount: 2,
+        });
+    });
+
+    describe("видимый разделитель (separatorColorVar)", () => {
+        function separated(count: number, weights?: number[]): { part: EditorPartElement; views: TUIElement[] } {
+            const part = new EditorPartElement();
+            part.separatorColorVar = "test.separator";
+            const views = panels(count);
+            part.setViews(views, weights);
+            return { part, views };
+        }
+
+        function sashesOf(part: EditorPartElement): SashElement[] {
+            return part.getChildren().filter((ch): ch is SashElement => ch instanceof SashElement);
+        }
+
+        function drag(sash: SashElement, from: Point, to: Point): void {
+            const at = (type: "mousedown" | "mousemove" | "mouseup", p: Point) =>
+                new TUIMouseEvent(type, { button: "left", screenX: p.x, screenY: p.y, localX: 0, localY: 0 });
+            sash.dispatchEvent(at("mousedown", from));
+            sash.dispatchEvent(at("mousemove", to));
+            sash.dispatchEvent(at("mouseup", to));
+        }
+
+        it("по умолчанию выключен, повтор того же значения — no-op", () => {
+            const part = new EditorPartElement();
+            expect(part.separatorColorVar).toBeNull();
+            part.setViews(panels(2));
+            part.separatorColorVar = "test.separator";
+            part.separatorColorVar = "test.separator";
+            expect(part.separatorColorVar).toBe("test.separator");
+            expect(sashesOf(part).map((s) => s.restColorVar)).toEqual(["test.separator"]);
+            part.separatorColorVar = null;
+            expect(sashesOf(part).map((s) => s.restColorVar)).toEqual([null]);
+        });
+
+        it("columns: колонка разделителя между группами, саш на ней, сумма — ширина полосы", () => {
+            const { part, views } = separated(2);
+            layoutAt(part, 101, 30);
+            const [a, b] = views;
+
+            expect(a.layoutSize).toEqual(new Size(50, 30));
+            expect(b.layoutSize).toEqual(new Size(50, 30));
+            expect(b.localPosition).toEqual(new Offset(51, 0));
+            const [sash] = sashesOf(part);
+            expect(sash.localPosition).toEqual(new Offset(50, 0));
+            expect(sash.layoutSize).toEqual(new Size(1, 30));
+            expect(sash.restColorVar).toBe("test.separator");
+        });
+
+        it("columns: N групп — N ширин плюс N−1 разделителей, без перекрытий", () => {
+            const { part, views } = separated(3);
+            layoutAt(part, 92, 10);
+
+            expect(views.map((v) => v.layoutSize.width)).toEqual([30, 30, 30]);
+            expect(views.map((v) => v.localPosition.dx)).toEqual([0, 31, 62]);
+            expect(sashesOf(part).map((s) => s.localPosition.dx)).toEqual([30, 61]);
+        });
+
+        it("rows: строка разделителя не съедает строк соседних групп", () => {
+            const { part, views } = separated(2);
+            part.orientation = "rows";
+            layoutAt(part, 80, 31);
+            const [a, b] = views;
+
+            expect(a.layoutSize).toEqual(new Size(80, 15));
+            expect(b.layoutSize).toEqual(new Size(80, 15));
+            expect(b.localPosition).toEqual(new Offset(0, 16));
+            const [sash] = sashesOf(part);
+            expect(sash.localPosition).toEqual(new Offset(0, 15));
+            expect(sash.layoutSize).toEqual(new Size(80, 1));
+        });
+
+        it("смена оси пересоздаёт саши с тем же цветом разделителя", () => {
+            const { part } = separated(2);
+            part.orientation = "rows";
+            expect(sashesOf(part).map((s) => s.restColorVar)).toEqual(["test.separator"]);
+        });
+
+        it("drag в columns ставит разделитель под курсор", () => {
+            const { part, views } = separated(2);
+            layoutAt(part, 101, 30);
+            let fired = 0;
+            part.onDidChangeWeights = () => fired++;
+
+            drag(sashesOf(part)[0], new Point(50, 5), new Point(70, 5));
+
+            expect(fired).toBe(1);
+            layoutAt(part, 101, 30);
+            expect(views[0].layoutSize.width).toBe(70);
+            expect(views[1].layoutSize.width).toBe(30);
+            expect(sashesOf(part)[0].localPosition.dx).toBe(70);
+        });
+
+        it("drag второго саша учитывает разделители левее", () => {
+            const { part, views } = separated(3);
+            layoutAt(part, 92, 10);
+
+            drag(sashesOf(part)[1], new Point(61, 5), new Point(66, 5));
+
+            layoutAt(part, 92, 10);
+            expect(views.map((v) => v.layoutSize.width)).toEqual([30, 35, 25]);
+            expect(sashesOf(part)[1].localPosition.dx).toBe(66);
+        });
+
+        it("drag в rows ставит разделитель на строку курсора", () => {
+            const { part, views } = separated(3);
+            part.orientation = "rows";
+            layoutAt(part, 80, 32);
+            expect(views.map((v) => v.layoutSize.height)).toEqual([10, 10, 10]);
+            expect(sashesOf(part).map((s) => s.localPosition.dy)).toEqual([10, 21]);
+
+            drag(sashesOf(part)[1], new Point(5, 21), new Point(5, 26));
+
+            layoutAt(part, 80, 32);
+            expect(views.map((v) => v.layoutSize.height)).toEqual([10, 15, 5]);
+            expect(sashesOf(part)[1].localPosition.dy).toBe(26);
+        });
+
+        it("drag упирается в минимум соседа", () => {
+            const { part, views } = separated(2);
+            layoutAt(part, 101, 30);
+
+            drag(sashesOf(part)[0], new Point(50, 5), new Point(100, 5));
+
+            layoutAt(part, 101, 30);
+            expect(views[1].layoutSize.width).toBe(MIN_GROUP_MAIN_COLS);
+            expect(views[0].layoutSize.width).toBe(100 - MIN_GROUP_MAIN_COLS);
+        });
+
+        it("nudgeWeight клампится по минимуму без клеток разделителя", () => {
+            const { part, views } = separated(2);
+            part.orientation = "rows";
+            layoutAt(part, 80, 21);
+
+            part.nudgeWeight(0, 100);
+
+            layoutAt(part, 80, 21);
+            expect(views[1].layoutSize.height).toBe(MIN_GROUP_MAIN_ROWS);
+            expect(views[0].layoutSize.height).toBe(20 - MIN_GROUP_MAIN_ROWS);
+        });
+
+        it("canFit учитывает разделители: count×min + (count−1) ≤ main", () => {
+            const { part } = separated(1);
+            layoutAt(part, 41, 30);
+            expect(part.canFit(2)).toBe(true); // 2×20 + 1 = 41
+            layoutAt(part, 40, 30);
+            expect(part.canFit(2)).toBe(false); // 41 > 40
+
+            part.orientation = "rows";
+            layoutAt(part, 40, 11);
+            expect(part.canFit(2)).toBe(true); // 2×5 + 1 = 11
+            expect(part.canFit(3)).toBe(false); // 3×5 + 2 = 17
+        });
+
+        it("одна группа — без разделителя, на всю полосу", () => {
+            const { part, views } = separated(1);
+            layoutAt(part, 80, 30);
+            expect(views[0].layoutSize).toEqual(new Size(80, 30));
+            expect(sashesOf(part)).toEqual([]);
+        });
+
+        it("максимизация — группа на всю полосу без разделителей, восстановление их возвращает", () => {
+            const { part, views } = separated(2);
+            layoutAt(part, 101, 30);
+
+            part.maximizedIndex = 1;
+            layoutAt(part, 101, 30);
+            expect(views[1].layoutSize).toEqual(new Size(101, 30));
+            expect(sashesOf(part).every((s) => s.hidden)).toBe(true);
+
+            part.maximizedIndex = null;
+            layoutAt(part, 101, 30);
+            expect(views[0].layoutSize.width).toBe(50);
+            expect(sashesOf(part)[0].hidden).toBe(false);
+            expect(sashesOf(part)[0].localPosition.dx).toBe(50);
+        });
+
+        it("веса — доли групп без клеток разделителей и переживают ресайз", () => {
+            const { part, views } = separated(2, [3, 1]);
+            layoutAt(part, 81, 30);
+            expect(views.map((v) => v.layoutSize.width)).toEqual([60, 20]);
+            expect(part.weights).toEqual([0.75, 0.25]);
+
+            layoutAt(part, 161, 30);
+            expect(views.map((v) => v.layoutSize.width)).toEqual([120, 40]);
+        });
+
+        it("узкая полоса: разделители по одной клетке, сжимаются группы", () => {
+            const { part, views } = separated(3);
+            layoutAt(part, 32, 10);
+
+            expect(views.map((v) => v.layoutSize.width)).toEqual([10, 10, 10]);
+            expect(sashesOf(part).map((s) => s.localPosition.dx)).toEqual([10, 21]);
         });
     });
 });
