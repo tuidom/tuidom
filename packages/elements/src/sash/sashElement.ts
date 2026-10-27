@@ -50,14 +50,14 @@ export class SashElement extends TUIElement {
             if (event.button !== "left") return;
             // Dragging lights the line immediately; no point waiting on the hover delay.
             this.clearHoverTimer();
-            this.dragging = true;
+            this.setDragging(true);
         });
         this.addEventListener("mousemove", (event) => {
             if (!this.dragging) return;
             this.onDrag?.(this.orientation === "vertical" ? event.screenX : event.screenY);
         });
         this.addEventListener("mouseup", () => {
-            this.dragging = false;
+            this.setDragging(false);
         });
         // Ядерное hover-состояние мгновенно, а сашу нужна задержка (мелькание
         // при пролёте курсора) — таймер остаётся, но результат выражается
@@ -90,6 +90,13 @@ export class SashElement extends TUIElement {
     public set restColorVar(value: string | null) {
         if (this.restColorVarValue === value) return;
         this.restColorVarValue = value;
+        this.markDirty();
+    }
+
+    /** The line color follows the drag, so a drag start or end needs a repaint of its own. */
+    private setDragging(value: boolean): void {
+        if (this.dragging === value) return;
+        this.dragging = value;
         this.markDirty();
     }
 

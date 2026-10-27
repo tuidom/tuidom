@@ -1,6 +1,7 @@
 import { packRgb } from "@tuidom/core/common/colorUtils";
 import { BoxConstraints, Offset, Point, Rect, Size } from "@tuidom/core/common/geometryPromitives";
 import { MouseEventDispatcher } from "@tuidom/core/dom/events/mouseEventDispatcher";
+import { TUIMouseEvent } from "@tuidom/core/dom/events/tuiMouseEvent";
 import { STYLE_TOKEN_DEFAULTS } from "@tuidom/core/dom/styles/styleTokens";
 import { ROOT_STYLE_CONTEXT } from "@tuidom/core/dom/styles/tuiStyle";
 import { RenderContext, TUIElement } from "@tuidom/core/dom/tuiElement";
@@ -177,6 +178,23 @@ describe("SashElement", () => {
 
         dispatcher.handleMouseToken(makeToken({ action: "release", x: 31, y: 1 }), root);
         expect(renderTopChar(sash)).toBe(" ");
+    });
+
+    it("asks for a repaint when a drag starts and ends, so the line color follows it", () => {
+        const { root, sash } = buildScene();
+        const dispatcher = new MouseEventDispatcher();
+        const repaints = vi.spyOn(sash, "markDirty");
+
+        // A stray release with no drag in progress changes nothing.
+        sash.dispatchEvent(
+            new TUIMouseEvent("mouseup", { button: "left", screenX: 30, screenY: 0, localX: 0, localY: 0 }),
+        );
+        expect(repaints).not.toHaveBeenCalled();
+
+        dispatcher.handleMouseToken(makeToken({ action: "press", x: 31, y: 1 }), root);
+        expect(repaints).toHaveBeenCalledTimes(1);
+        dispatcher.handleMouseToken(makeToken({ action: "release", x: 31, y: 1 }), root);
+        expect(repaints).toHaveBeenCalledTimes(2);
     });
 
     it("cancels the pending hover timer when the cursor leaves before the delay", () => {
