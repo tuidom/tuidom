@@ -17,6 +17,14 @@ const TYPEAHEAD_TIMEOUT_MS = 800;
 const SYMLINK_BADGE = "\u21B5"; // enter-like arrow marking a symlink, pinned to the right edge
 
 const SEGMENT_SEPARATOR = "/";
+const INDENT_GUIDE = "\u2502"; // centred under the ancestor's twistie
+
+/**
+ * Когда рисовать отступные линии — `workbench.tree.renderIndentGuides` эталона:
+ * `none` — никогда; `onHover` — активные всегда, остальные, пока мышь над
+ * деревом; `always` — все всегда.
+ */
+export type TreeIndentGuides = "none" | "onHover" | "always";
 
 /** Текущий сегмент компактной строки; `signature` — сегменты, для которых он выбран. */
 interface SegmentState {
@@ -85,6 +93,8 @@ interface FlatTreeNode<T> {
     depth: number;
     item: ITreeItem;
     parentKey: string | null;
+    /** Индекс родителя в плоском списке; -1 — узел верхнего уровня. */
+    parentIndex: number;
     /** Ширина метки в колонках: описание начинается через пробел после неё. */
     labelWidth: number;
 }
@@ -97,6 +107,8 @@ export class TreeViewElement<T> extends ScrollableElement {
     private selectedIndex = 0;
     private selectionAnchor = 0;
     private hoveredIndex: number | null = null;
+    /** Указатель внутри дерева (с mousemove до mouseleave), в том числе под строками. */
+    private pointerInside = false;
     private selectedKeys = new Set<string>();
     private cutKeys = new Set<string>();
     private maxRowWidth = 0;
@@ -155,6 +167,13 @@ export class TreeViewElement<T> extends ScrollableElement {
      * умолчанию): лист открывают двойной клик и Enter. Читается на каждом жесте.
      */
     public openOnSingleClick: boolean | (() => boolean);
+    /**
+     * Отступные линии ({@link TreeIndentGuides}): у строки — по `│` на каждого
+     * предка в колонке его шеврона. Активна линия папки под курсором или
+     * выделением, а у листа — линия его родителя. `none` (по умолчанию) — линий
+     * нет. Читается на каждой отрисовке: сменив значение, вызовите `markDirty()`.
+     */
+    public renderIndentGuides: TreeIndentGuides | (() => TreeIndentGuides);
 
     public constructor(
         provider: ITreeDataProvider<T>,
@@ -162,6 +181,7 @@ export class TreeViewElement<T> extends ScrollableElement {
             leftPadding?: number;
             expandOnlyOnTwistieClick?: boolean | ((element: T) => boolean);
             openOnSingleClick?: boolean | (() => boolean);
+            renderIndentGuides?: TreeIndentGuides | (() => TreeIndentGuides);
         },
     ) {
         super();
@@ -169,6 +189,7 @@ export class TreeViewElement<T> extends ScrollableElement {
         this.leftPadding = options?.leftPadding ?? 0;
         this.expandOnlyOnTwistieClick = options?.expandOnlyOnTwistieClick ?? true;
         this.openOnSingleClick = options?.openOnSingleClick ?? false;
+        this.renderIndentGuides = options?.renderIndentGuides ?? "none";
         this.provider = provider;
         this.provider.onChange = (element) => {
             void this.refresh(element);
@@ -393,6 +414,9 @@ export class TreeViewElement<T> extends ScrollableElement {
         const { scrollTop, scrollLeft, viewportWidth, viewportHeight } = viewport;
         const resolved = this.resolvedStyle;
         const focused = this.isFocused;
+        const guides = this.indentGuidesMode();
+        const activeGuides = guides === "none" ? null : this.activeGuideOwners();
+        const showInactiveGuides = guides === "always" || (guides === "onHover" && this.pointerInside);
 
         for (let screenY = 0; screenY < viewportHeight; screenY++) {
             const nodeIndex = scrollTop + screenY;
@@ -440,6 +464,8 @@ export class TreeViewElement<T> extends ScrollableElement {
             // строке берёт её цвет — по тому же правилу, что цвет-декорация имени.
             const descriptionFg = isCursor || isSelected ? rowFg : this.styleVar("descriptionForeground");
             const dl = new DisplayLine(rowText);
+            const guideFgs =
+                activeGuides === null ? null : this.rowGuideColors(nodeIndex, activeGuides, showInactiveGuides);
 
             let screenX = 0;
             let col = scrollLeft;
@@ -450,7 +476,7 @@ export class TreeViewElement<T> extends ScrollableElement {
                     screenX++;
                     continue;
                 }
-                const char = dl.charAtColumn(col);
+                let char = dl.charAtColumn(col);
                 if (char === "") {
                     col++;
                     screenX++;
@@ -482,6 +508,13 @@ export class TreeViewElement<T> extends ScrollableElement {
                 const expandIconPos = this.rowIndentX(node.depth);
                 if (col === expandIconPos && node.item.collapsible) {
                     fg = this.styleVar("list.deemphasizedForeground");
+                }
+
+                // Отступ строки — пробелы: линия предка встаёт на место пробела.
+                const guideFg = guideFgs?.[col];
+                if (guideFg !== undefined) {
+                    char = INDENT_GUIDE;
+                    fg = guideFg;
                 }
 
                 const style = underlined.some((span) => col >= span.start && col < span.end)
@@ -532,6 +565,48 @@ export class TreeViewElement<T> extends ScrollableElement {
                 this.renderInlineActions(context, node, screenY, viewportWidth, rowFg, rowBg, isHovered);
             }
         }
+    }
+
+    private indentGuidesMode(): TreeIndentGuides {
+        const mode = this.renderIndentGuides;
+        return typeof mode === "function" ? mode() : mode;
+    }
+
+    /**
+     * Индексы узлов, чья линия активна (`_onDidChangeActiveNodes` эталона):
+     * для строки курсора и каждой выделенной — её собственная линия, если это
+     * раскрытая папка с детьми, иначе линия её родителя.
+     */
+    private activeGuideOwners(): Set<number> {
+        const owners = new Set<number>();
+        const add = (index: number): void => {
+            const ownsGuide = this.flatNodes.at(index + 1)?.parentIndex === index;
+            const owner = ownsGuide ? index : this.flatNodes[index].parentIndex;
+            if (owner >= 0) owners.add(owner);
+        };
+        if (this.selectedIndex < this.flatNodes.length) add(this.selectedIndex);
+        if (this.selectedKeys.size > 0) {
+            this.flatNodes.forEach((node, index) => {
+                if (this.selectedKeys.has(this.provider.getKey(node.element))) add(index);
+            });
+        }
+        return owners;
+    }
+
+    /**
+     * Цвета линий строки по колонкам контента: у каждого предка — в колонке
+     * его шеврона. Неактивные линии без `showInactive` не рисуются.
+     */
+    private rowGuideColors(index: number, activeOwners: Set<number>, showInactive: boolean): (number | undefined)[] {
+        const colors: (number | undefined)[] = [];
+        for (let owner = this.flatNodes[index].parentIndex; owner >= 0; owner = this.flatNodes[owner].parentIndex) {
+            const active = activeOwners.has(owner);
+            if (!active && !showInactive) continue;
+            colors[this.rowIndentX(this.flatNodes[owner].depth)] = this.styleVar(
+                active ? "tree.indentGuidesStroke" : "tree.inactiveIndentGuidesStroke",
+            );
+        }
+        return colors;
     }
 
     private renderInlineActions(
@@ -671,7 +746,7 @@ export class TreeViewElement<T> extends ScrollableElement {
 
         const previousWidths = this.labelWidths;
         const labelWidths = new Map<string, number>();
-        this.appendChildren(rootChildren, 0, null, previousWidths, labelWidths);
+        this.appendChildren(rootChildren, 0, null, -1, previousWidths, labelWidths);
         this.labelWidths = labelWidths;
 
         const previousSegments = this.segmentStates;
@@ -688,6 +763,7 @@ export class TreeViewElement<T> extends ScrollableElement {
         children: T[],
         depth: number,
         parentKey: string | null,
+        parentIndex: number,
         previousWidths: Map<string, number>,
         labelWidths: Map<string, number>,
     ): void {
@@ -696,7 +772,8 @@ export class TreeViewElement<T> extends ScrollableElement {
             const item = this.provider.getTreeItem(element);
 
             const labelWidth = this.textWidth(rowLabel(item), previousWidths, labelWidths);
-            this.flatNodes.push({ element, depth, item, parentKey, labelWidth });
+            const index = this.flatNodes.length;
+            this.flatNodes.push({ element, depth, item, parentKey, parentIndex, labelWidth });
             const description = rowDescription(item);
             // indent + expandIcon + space + icon + space + label [+ space + description]
             // [+ space + symlink + badge]: бейджи прижаты к краю viewport'а поверх
@@ -716,7 +793,7 @@ export class TreeViewElement<T> extends ScrollableElement {
                 const cachedChildren = this.childrenCache.get(key);
                 /* v8 ignore start -- defensive: an expanded key always has its children cached (cache and expandedKeys stay in sync) */
                 if (cachedChildren) {
-                    this.appendChildren(cachedChildren, depth + 1, key, previousWidths, labelWidths);
+                    this.appendChildren(cachedChildren, depth + 1, key, index, previousWidths, labelWidths);
                 }
                 /* v8 ignore stop */
             }
@@ -1216,8 +1293,10 @@ export class TreeViewElement<T> extends ScrollableElement {
         if (
             newHovered !== this.hoveredIndex ||
             newSegment !== this.hoveredSegment ||
-            newAction !== this.hoveredAction
+            newAction !== this.hoveredAction ||
+            !this.pointerInside
         ) {
+            this.pointerInside = true;
             this.hoveredIndex = newHovered;
             this.hoveredSegment = newSegment;
             this.hoveredAction = newAction;
@@ -1226,7 +1305,8 @@ export class TreeViewElement<T> extends ScrollableElement {
     }
 
     private handleMouseLeave(): void {
-        if (this.hoveredIndex !== null) {
+        if (this.hoveredIndex !== null || this.pointerInside) {
+            this.pointerInside = false;
             this.hoveredIndex = null;
             this.hoveredSegment = null;
             this.hoveredAction = null;

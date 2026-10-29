@@ -126,5 +126,7 @@ export const DARK_PLUS_STYLE_VARS: Readonly<Record<string, number>> = {
     "terminal.inactiveSelectionBackground": 0x3a3d41,
     "textLink.foreground": 0x3794ff,
     "toolbar.hoverBackground": 0x5a5d5e,
+    "tree.inactiveIndentGuidesStroke": 0x66585858,
+    "tree.indentGuidesStroke": 0x585858,
     "widget.border": 0x303031,
 };
