@@ -50,6 +50,9 @@ export const STYLE_TOKEN_DEFAULTS = {
     "list.hoverBackground": packRgb(42, 45, 46),
     "list.deemphasizedForeground": packRgb(150, 150, 150),
     "list.highlightForeground": packRgb(100, 200, 255),
+    // Отступные линии дерева: неактивная — 40% альфы активной (`transparent(…, 0.4)` эталона).
+    "tree.indentGuidesStroke": packRgb(88, 88, 88),
+    "tree.inactiveIndentGuidesStroke": packRgba(88, 88, 88, 0x66),
 
     // ── Скроллбар (фон колонки наследуется каскадом от хозяина) ──
     "scrollbarSlider.background": packRgb(100, 100, 100),
