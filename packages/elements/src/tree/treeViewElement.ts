@@ -1,5 +1,5 @@
 import { DisplayLine } from "@tuidom/core/common/displayLine";
-import { Point } from "@tuidom/core/common/geometryPromitives";
+import { type BoxConstraints, Point, type Size } from "@tuidom/core/common/geometryPromitives";
 import { StyleFlags } from "@tuidom/core/common/styleFlags";
 import type { TUIEventBase } from "@tuidom/core/dom/events/tuiEventBase";
 import type { TUIKeyboardEvent } from "@tuidom/core/dom/events/tuiKeyboardEvent";
@@ -138,6 +138,8 @@ export class TreeViewElement<T> extends ScrollableElement {
     private hoveredAction: number | null = null;
     private typeaheadBuffer = "";
     private typeaheadTimer: ReturnType<typeof setTimeout> | null = null;
+    /** Высота последней раскладки; null — дерево ещё не раскладывали (`layoutSize` там — значение по умолчанию). */
+    private laidOutHeight: number | null = null;
 
     public onSelect: ((item: T) => void) | null = null;
     /** Открыть строку: Enter, двойной клик по листу, а с {@link openOnSingleClick} — и одиночный. */
@@ -569,9 +571,17 @@ export class TreeViewElement<T> extends ScrollableElement {
             // Inline-действия — левее бейджей, на строке под мышью, курсора и
             // выделенных (`:hover`, `.focused`, `.selected` у эталона). Прижаты к
             // краю viewport'а, а не контента, и заливают фон строки под собой.
-            // На остальных строках — только действия с глифом покоя (`idleIcon`).
-            const idle = !(isHovered || isCursor || isSelected);
-            this.renderInlineActions(context, node, screenY, viewportWidth, rowFg, rowBg, isHovered, idle);
+            // Вне строки под мышью действие с глифом покоя рисует его (`idleIcon`).
+            this.renderInlineActions(
+                context,
+                node,
+                screenY,
+                viewportWidth,
+                rowFg,
+                rowBg,
+                isHovered,
+                isCursor || isSelected,
+            );
         }
     }
 
@@ -625,9 +635,13 @@ export class TreeViewElement<T> extends ScrollableElement {
         fg: number,
         rowBg: number,
         isHovered: boolean,
-        idle: boolean,
+        isActive: boolean,
     ): void {
-        const layout = this.inlineActionsLayout(node, viewportWidth, idle);
+        const layout = this.inlineActionsLayout(
+            node,
+            viewportWidth,
+            isHovered ? "hovered" : isActive ? "active" : "idle",
+        );
         if (layout === null) return;
         for (let x = layout.start; x < layout.end; x++) {
             context.setCell(x, screenY, { char: " ", fg, bg: rowBg, width: 1 });
@@ -648,12 +662,13 @@ export class TreeViewElement<T> extends ScrollableElement {
      * глифы `[start, end)` с номером действия, `[start, end)` — весь блок с
      * пробелом слева и, если справа бейдж или стрелка симлинка, пробелом перед
      * ними. Не влезший глиф и всё левее него не рисуются. null — рисовать нечего.
-     * `idle` — строка без наведения и выделения: только действия с `idleIcon`, его глифом.
+     * `row`: под мышью — глифы действий; курсор или выделение — `idleIcon`, где он
+     * есть, иначе глиф действия; прочие строки — только `idleIcon`.
      */
     private inlineActionsLayout(
         node: FlatTreeNode<T>,
         viewportWidth: number,
-        idle = false,
+        row: "hovered" | "active" | "idle" = "hovered",
     ): InlineActionsLayout | null {
         const actions = node.item.actions ?? [];
         // Левая граница бейджей у правого края: см. отрисовку badge/симлинка.
@@ -664,7 +679,11 @@ export class TreeViewElement<T> extends ScrollableElement {
         if (right < viewportWidth) right -= 1;
         const spans: InlineActionSpan[] = [];
         for (let index = actions.length - 1; index >= 0; index--) {
-            const glyph = idle ? actions[index].idleIcon : actionText(actions[index]);
+            const action = actions[index];
+            const glyph =
+                row === "hovered"
+                    ? actionText(action)
+                    : (action.idleIcon ?? (row === "active" ? actionText(action) : undefined));
             if (glyph === undefined) continue;
             const text = new DisplayLine(glyph);
             const start = right - text.displayWidth;
@@ -1017,6 +1036,29 @@ export class TreeViewElement<T> extends ScrollableElement {
         this.ensureVisible(index);
         this.onSelect?.(this.flatNodes[index].element);
         this.markDirty();
+    }
+
+    /**
+     * Высота сменилась (секцию показали или растянули, окно сжали): курсор, видимый
+     * до неё, остаётся видимым — иначе строка, открытая до первой раскладки (высота
+     * по умолчанию), оказывается за краем.
+     */
+    protected override performLayout(constraints: BoxConstraints): Size {
+        const previousHeight = this.laidOutHeight;
+        const cursorWasVisible =
+            previousHeight === null ||
+            (this.selectedIndex >= this.scrollTop && this.selectedIndex < this.scrollTop + previousHeight);
+        const size = super.performLayout(constraints);
+        this.laidOutHeight = size.height;
+        if (cursorWasVisible && size.height !== previousHeight && this.selectedIndex < this.flatNodes.length) {
+            if (this.selectedIndex >= this.scrollTop + size.height) {
+                this.scrollTop = Math.min(
+                    this.selectedIndex - size.height + 1,
+                    Math.max(0, this.contentHeight - size.height),
+                );
+            }
+        }
+        return size;
     }
 
     private ensureVisible(index: number): void {

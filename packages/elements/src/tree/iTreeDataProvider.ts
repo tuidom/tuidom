@@ -7,10 +7,10 @@ export interface ITreeItemAction {
     /** Готовый глиф (напр. codicon). */
     readonly icon?: string;
     /**
-     * Глиф на строке, где действия скрыты (не под мышью, не курсор и не
-     * выделена): так у эталона ● изменённого редактора в Open Editors стоит
-     * всегда, а под мышью становится ×. Без него действие на такой строке не
-     * рисуется. Клик по нему — то же действие.
+     * Глиф действия на строке не под мышью — в том числе на строке курсора и
+     * выделенной (`.dirty:not(:hover)` эталона): ● изменённого редактора в Open
+     * Editors стоит всегда, а под мышью становится ×. Без него действие видно
+     * только на строке под мышью, курсора и выделенных. Клик — то же действие.
      */
     readonly idleIcon?: string;
 }
@@ -44,7 +44,8 @@ export interface ITreeItem {
     /**
      * Inline-действия строки (пункты `view/item/context` с `group: "inline"` у
      * VS Code): глифы у правого края viewport'а, только на строке под мышью,
-     * курсора и выделенных (на прочих — только {@link ITreeItemAction.idleIcon}).
+     * курсора и выделенных (вне строки под мышью действие с {@link ITreeItemAction.idleIcon}
+     * рисует его).
      * Клик — {@link TreeViewElement.onInlineAction}.
      */
     readonly actions?: readonly ITreeItemAction[];
