@@ -121,6 +121,28 @@ describe("TreeViewElement - inline actions", () => {
         expect(row(screen, 2)).toBe("  GOBIN");
     });
 
+    it("draws the idle glyph on rows without hover or cursor and the action glyph otherwise", async () => {
+        const CLOSE = { label: "Close", icon: "\u00D7", idleIcon: "\u25CF" };
+        const tree = await createTree([
+            { id: "a", label: "a.ts", actions: [CLOSE] },
+            { id: "b", label: "b.ts", actions: [EDIT, CLOSE] },
+            { id: "c", label: "c.ts", actions: [CLOSE] },
+        ]);
+        let screen = render(tree);
+        expect(row(screen, 0)).toBe("  a.ts             \u00D7");
+        // An action without an idle glyph takes no room: the idle one sits at the edge.
+        expect(row(screen, 1)).toBe("  b.ts             \u25CF");
+        mouse(tree, "mousemove", 3, 2);
+        screen = render(tree);
+        expect(row(screen, 1)).toBe("  b.ts             \u25CF");
+        expect(row(screen, 2)).toBe("  c.ts             \u00D7");
+        // Clicking the idle glyph runs the same action.
+        const onInlineAction = vi.fn();
+        tree.onInlineAction = onInlineAction;
+        mouse(tree, "click", 19, 1);
+        expect(onInlineAction).toHaveBeenCalledWith(expect.objectContaining({ id: "b" }), 1);
+    });
+
     it("draws the label of an action without an icon", async () => {
         const screen = render(await createTree([{ id: "ws", label: "ws", actions: [{ label: "View" }, OPEN] }]));
         expect(row(screen, 0)).toBe("  ws          View \uEB14");

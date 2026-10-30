@@ -1,5 +1,6 @@
 import { packRgb } from "@tuidom/core/common/colorUtils";
 import { BoxConstraints, Offset, Point, Rect, Size } from "@tuidom/core/common/geometryPromitives";
+import { StyleFlags } from "@tuidom/core/common/styleFlags";
 import { TUIKeyboardEvent } from "@tuidom/core/dom/events/tuiKeyboardEvent";
 import { ROOT_STYLE_CONTEXT } from "@tuidom/core/dom/styles/tuiStyle";
 import { RenderContext } from "@tuidom/core/dom/tuiElement";
@@ -17,6 +18,7 @@ interface TestNode {
     badge?: string;
     symlink?: boolean;
     labelColor?: number;
+    italic?: boolean;
     children?: TestNode[];
 }
 
@@ -30,6 +32,7 @@ function createProvider(roots: TestNode[]): ITreeDataProvider<TestNode> {
                 badge: element.badge,
                 symlink: element.symlink,
                 labelColor: element.labelColor,
+                italic: element.italic,
                 collapsible: (element.children?.length ?? 0) > 0,
             };
         },
@@ -131,6 +134,21 @@ describe("TreeViewElement - description", () => {
         expect(fgAt(screen, 2, 1)).toBe(LABEL_COLOR);
         expect(fgAt(screen, 8, 1)).toBe(LABEL_COLOR);
         expect(fgAt(screen, 10, 1)).toBe(DESCRIPTION_FG);
+    });
+
+    it("italic sets the italic flag on the label only, not on the icon gap or the description", async () => {
+        const screen = render(await createTree([{ id: "a", label: "ab", description: "src", italic: true }]));
+        const styleAt = (x: number): number => screen.getCell(new Point(x, 0)).style;
+        // "  ab src": the label is columns 2..3.
+        expect([1, 2, 3, 4, 5].map(styleAt)).toEqual([
+            StyleFlags.None,
+            StyleFlags.Italic,
+            StyleFlags.Italic,
+            StyleFlags.None,
+            StyleFlags.None,
+        ]);
+        const plain = render(await createTree([{ id: "a", label: "ab" }]));
+        expect(plain.getCell(new Point(2, 0)).style).toBe(StyleFlags.None);
     });
 
     it("draws the badge at the right edge over a long description", async () => {

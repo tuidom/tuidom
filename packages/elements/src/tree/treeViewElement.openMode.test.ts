@@ -153,6 +153,21 @@ describe("TreeViewElement — openOnSingleClick", () => {
             expect(tree.getSelectedNode()?.id).toBe("LICENSE");
         });
 
+        it("onMiddleClick replaces the default: the row gets the cursor, nothing opens", async () => {
+            const tree = await createTree(true);
+            const onActivate = vi.fn();
+            const onMiddleClick = vi.fn();
+            tree.onActivate = onActivate;
+            tree.onMiddleClick = onMiddleClick;
+
+            click(tree, 2, { button: "middle" });
+            click(tree, 0, { button: "middle" });
+
+            expect(onMiddleClick.mock.calls.map(([node]) => (node as TestNode).id)).toEqual(["LICENSE", "src"]);
+            expect(onActivate).not.toHaveBeenCalled();
+            expect(tree.getSelectedNode()?.id).toBe("src");
+        });
+
         it("a middle click on a folder does nothing", async () => {
             const tree = await createTree(true);
             const onActivate = vi.fn();
