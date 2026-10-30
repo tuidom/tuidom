@@ -1,3 +1,4 @@
+import type { BoxConstraints, Size } from "@tuidom/core/common/geometryPromitives";
 import { RenderContext, TUIElement } from "@tuidom/core/dom/tuiElement";
 
 import type { IScrollable } from "./iScrollable.ts";
@@ -30,6 +31,18 @@ export abstract class ScrollableElement extends TUIElement implements IScrollabl
 
     public override getMaxIntrinsicHeight(_width: number): number {
         return this.contentHeight;
+    }
+
+    /**
+     * Viewport вырос (секцию растянули, окно развернули) — прежнее смещение может
+     * оказаться за концом: контент уехал бы вверх, а под ним остались бы пустые
+     * строки. Клампим по новому размеру, как список эталона на `layout`.
+     */
+    protected override performLayout(constraints: BoxConstraints): Size {
+        const size = super.performLayout(constraints);
+        this.scrollTop = Math.max(0, Math.min(this.scrollTop, this.contentHeight - size.height));
+        this.scrollLeft = Math.max(0, Math.min(this.scrollLeft, this.contentWidth - size.width));
+        return size;
     }
 
     public scrollBy(dx: number, dy: number): void {

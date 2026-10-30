@@ -152,6 +152,12 @@ export class TreeViewElement<T> extends ScrollableElement {
      */
     public onInlineAction: ((element: T, index: number) => void) | null = null;
     /**
+     * Средний клик по строке. Задан — заменяет поведение по умолчанию (лист
+     * открывается постоянно, фокус остаётся в дереве): Open Editors эталона
+     * средним кликом закрывает редактор. Курсор переходит на строку.
+     */
+    public onMiddleClick: ((element: T) => void) | null = null;
+    /**
      * Раскрывать узел только шевроном — `expandOnlyOnTwistieClick` дерева
      * эталона. `true` (по умолчанию): клик по имени лишь выделяет, узел
      * переключают шеврон и двойной клик, Enter не раскрывает. `false`: каждый
@@ -457,6 +463,7 @@ export class TreeViewElement<T> extends ScrollableElement {
             // Метка имени начинается сразу после иконки типа (если она есть).
             const labelStart = this.labelStartX(node);
             const labelEnd = labelStart + node.labelWidth;
+            const italic = node.item.italic === true;
             // Цвет-декорация имени уступает выделению/курсору, чтобы выбранная строка
             // оставалась читаемой (тот же приоритет, что и у cutFg).
             const labelColorActive = labelColor !== undefined && !(isCursor || isSelected);
@@ -517,9 +524,10 @@ export class TreeViewElement<T> extends ScrollableElement {
                     fg = guideFg;
                 }
 
-                const style = underlined.some((span) => col >= span.start && col < span.end)
+                let style = underlined.some((span) => col >= span.start && col < span.end)
                     ? StyleFlags.Underline
                     : StyleFlags.None;
+                if (italic && col >= labelStart && col < labelEnd) style |= StyleFlags.Italic;
 
                 if (w === 2 && screenX + 1 >= viewportWidth) {
                     context.setCell(screenX, screenY, { char: " ", fg, bg: rowBg, width: 1 });
@@ -561,9 +569,9 @@ export class TreeViewElement<T> extends ScrollableElement {
             // Inline-действия — левее бейджей, на строке под мышью, курсора и
             // выделенных (`:hover`, `.focused`, `.selected` у эталона). Прижаты к
             // краю viewport'а, а не контента, и заливают фон строки под собой.
-            if (isHovered || isCursor || isSelected) {
-                this.renderInlineActions(context, node, screenY, viewportWidth, rowFg, rowBg, isHovered);
-            }
+            // На остальных строках — только действия с глифом покоя (`idleIcon`).
+            const idle = !(isHovered || isCursor || isSelected);
+            this.renderInlineActions(context, node, screenY, viewportWidth, rowFg, rowBg, isHovered, idle);
         }
     }
 
@@ -617,8 +625,9 @@ export class TreeViewElement<T> extends ScrollableElement {
         fg: number,
         rowBg: number,
         isHovered: boolean,
+        idle: boolean,
     ): void {
-        const layout = this.inlineActionsLayout(node, viewportWidth);
+        const layout = this.inlineActionsLayout(node, viewportWidth, idle);
         if (layout === null) return;
         for (let x = layout.start; x < layout.end; x++) {
             context.setCell(x, screenY, { char: " ", fg, bg: rowBg, width: 1 });
@@ -639,8 +648,13 @@ export class TreeViewElement<T> extends ScrollableElement {
      * глифы `[start, end)` с номером действия, `[start, end)` — весь блок с
      * пробелом слева и, если справа бейдж или стрелка симлинка, пробелом перед
      * ними. Не влезший глиф и всё левее него не рисуются. null — рисовать нечего.
+     * `idle` — строка без наведения и выделения: только действия с `idleIcon`, его глифом.
      */
-    private inlineActionsLayout(node: FlatTreeNode<T>, viewportWidth: number): InlineActionsLayout | null {
+    private inlineActionsLayout(
+        node: FlatTreeNode<T>,
+        viewportWidth: number,
+        idle = false,
+    ): InlineActionsLayout | null {
         const actions = node.item.actions ?? [];
         // Левая граница бейджей у правого края: см. отрисовку badge/симлинка.
         let right = viewportWidth;
@@ -650,7 +664,9 @@ export class TreeViewElement<T> extends ScrollableElement {
         if (right < viewportWidth) right -= 1;
         const spans: InlineActionSpan[] = [];
         for (let index = actions.length - 1; index >= 0; index--) {
-            const text = new DisplayLine(actionText(actions[index]));
+            const glyph = idle ? actions[index].idleIcon : actionText(actions[index]);
+            if (glyph === undefined) continue;
+            const text = new DisplayLine(glyph);
             const start = right - text.displayWidth;
             if (start < 0) break;
             spans.unshift({ start, end: right, index, text });
@@ -1253,9 +1269,17 @@ export class TreeViewElement<T> extends ScrollableElement {
         if (!node.item.collapsible && this.opensOnSingleClick()) this.onActivate?.(node.element, OPEN_PREVIEW);
     }
 
-    /** Средний клик эталона (`onPointer`, `isMiddleClick`): лист — постоянно, фокус остаётся в дереве. */
+    /**
+     * Средний клик эталона (`onPointer`, `isMiddleClick`): лист — постоянно, фокус остаётся в дереве;
+     * с {@link onMiddleClick} — его обработчик.
+     */
     private handleMiddleClick(index: number): void {
         const node = this.flatNodes[index];
+        if (this.onMiddleClick !== null) {
+            this.setSelectedIndex(index);
+            this.onMiddleClick(node.element);
+            return;
+        }
         if (node.item.collapsible || !this.opensOnSingleClick()) return;
         this.setSelectedIndex(index);
         this.onActivate?.(node.element, OPEN_PINNED_IN_BACKGROUND);

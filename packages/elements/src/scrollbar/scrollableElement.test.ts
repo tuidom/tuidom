@@ -108,6 +108,25 @@ describe("ScrollableElement", () => {
             expect(widget.scrollTop).toBe(7);
         });
 
+        it("a taller and wider viewport pulls an offset past the end back", () => {
+            const { widget } = createGrid(5, 3, 20, 10);
+            widget.localPosition = new Offset(0, 0);
+            widget.layout(BoxConstraints.tight(new Size(5, 3)));
+            widget.scrollTo(15, 7);
+
+            widget.layout(BoxConstraints.tight(new Size(8, 6)));
+            expect([widget.scrollLeft, widget.scrollTop]).toEqual([12, 4]);
+
+            widget.layout(BoxConstraints.tight(new Size(30, 20)));
+            expect([widget.scrollLeft, widget.scrollTop]).toEqual([0, 0]);
+
+            // A smaller viewport leaves a valid offset alone.
+            widget.layout(BoxConstraints.tight(new Size(5, 3)));
+            widget.scrollTo(3, 2);
+            widget.layout(BoxConstraints.tight(new Size(4, 2)));
+            expect([widget.scrollLeft, widget.scrollTop]).toEqual([3, 2]);
+        });
+
         it("allows zero when content fits viewport", () => {
             const { widget, termScreen } = createGrid(10, 10, 5, 3);
             widget.localPosition = new Offset(0, 0);

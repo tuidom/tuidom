@@ -6,6 +6,13 @@ export interface ITreeItemAction {
     readonly label: string;
     /** Готовый глиф (напр. codicon). */
     readonly icon?: string;
+    /**
+     * Глиф на строке, где действия скрыты (не под мышью, не курсор и не
+     * выделена): так у эталона ● изменённого редактора в Open Editors стоит
+     * всегда, а под мышью становится ×. Без него действие на такой строке не
+     * рисуется. Клик по нему — то же действие.
+     */
+    readonly idleIcon?: string;
 }
 
 export interface ITreeItem {
@@ -19,6 +26,8 @@ export interface ITreeItem {
     readonly badge?: string;
     /** Упакованный RGB-цвет имени: переопределяет fg спана метки (напр. git-статус). */
     readonly labelColor?: StyleColor;
+    /** Метка курсивом (превью-вкладка в Open Editors эталона). */
+    readonly italic?: boolean;
     /**
      * Компактная строка (VS Code `explorer.compactFolders`): метка из нескольких
      * сегментов, которые рисуются через «/» вместо {@link label}. У строки есть
@@ -35,7 +44,8 @@ export interface ITreeItem {
     /**
      * Inline-действия строки (пункты `view/item/context` с `group: "inline"` у
      * VS Code): глифы у правого края viewport'а, только на строке под мышью,
-     * курсора и выделенных. Клик — {@link TreeViewElement.onInlineAction}.
+     * курсора и выделенных (на прочих — только {@link ITreeItemAction.idleIcon}).
+     * Клик — {@link TreeViewElement.onInlineAction}.
      */
     readonly actions?: readonly ITreeItemAction[];
 }
