@@ -1,4 +1,4 @@
-import { Size } from "@tuidom/core/common/geometryPromitives";
+import { BoxConstraints, Size } from "@tuidom/core/common/geometryPromitives";
 import { TestApp } from "@tuidom/testing/TestApp";
 import { describe, expect, it } from "vitest";
 
@@ -164,5 +164,30 @@ describe("TreeViewElement — reveal", () => {
 
         expect(app.backend.screenToString()).toContain("node-39");
         expect(tree.getSelectedNode()?.id).toBe("n39");
+    });
+    it("a row revealed before the first layout stays in view once the tree is laid out", async () => {
+        const many: TestNode[] = Array.from({ length: 14 }, (_v, i) => ({ id: `n${i}`, label: `node-${i}` }));
+        const tree = new TreeViewElement(createProvider(many));
+        await tree.refresh();
+        await tree.reveal([many[13]]);
+
+        tree.layout(BoxConstraints.tight(new Size(20, 9)));
+
+        expect(tree.scrollTop).toBe(5);
+    });
+
+    it("a visible cursor stays visible when the viewport shrinks; one scrolled away is left alone", async () => {
+        const many: TestNode[] = Array.from({ length: 30 }, (_v, i) => ({ id: `n${i}`, label: `node-${i}` }));
+        const tree = new TreeViewElement(createProvider(many));
+        tree.layout(BoxConstraints.tight(new Size(20, 10)));
+        await tree.refresh();
+        await tree.reveal([many[8]]);
+
+        tree.layout(BoxConstraints.tight(new Size(20, 4)));
+        expect(tree.scrollTop).toBe(5);
+
+        tree.scrollTo(0, 20);
+        tree.layout(BoxConstraints.tight(new Size(20, 3)));
+        expect(tree.scrollTop).toBe(20);
     });
 });
