@@ -20,6 +20,11 @@ export interface ITreeItem {
     readonly icon?: string;
     readonly iconColor?: StyleColor;
     readonly collapsible: boolean;
+    /**
+     * Раскрывающуюся строку мышь открывает как лист (`TreeItem.command` у VS Code):
+     * клик и двойной клик зовут `onActivate`, шеврон только раскрывает.
+     */
+    readonly openable?: boolean;
     /** Помечает элемент как символическую ссылку: рисуется стрелка-badge у левого края. */
     readonly symlink?: boolean;
     /** Буква-бейдж статуса (1–2 символа), рисуется у правого края строки (напр. git-статус). */
