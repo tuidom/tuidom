@@ -1207,6 +1207,11 @@ export class TreeViewElement<T> extends ScrollableElement {
         this.onActivate?.(node.element, OPEN_PINNED);
     }
 
+    /** Лист или строка с {@link ITreeItem.openable}: мышь открывает её, шеврон только раскрывает. */
+    private opensLikeLeaf(node: { readonly item: ITreeItem }): boolean {
+        return !node.item.collapsible || node.item.openable === true;
+    }
+
     private opensOnSingleClick(): boolean {
         const single = this.openOnSingleClick;
         return typeof single === "function" ? single() : single;
@@ -1308,7 +1313,9 @@ export class TreeViewElement<T> extends ScrollableElement {
         }
         // Второй клик двойного тоже открывает превью (у событий нет `detail`
         // эталона) — повтор того же превью безвреден, следом dblclick прикалывает.
-        if (!node.item.collapsible && this.opensOnSingleClick()) this.onActivate?.(node.element, OPEN_PREVIEW);
+        if (this.opensLikeLeaf(node) && !this.isOnTwistie(node, clickX) && this.opensOnSingleClick()) {
+            this.onActivate?.(node.element, OPEN_PREVIEW);
+        }
     }
 
     /**
@@ -1322,7 +1329,7 @@ export class TreeViewElement<T> extends ScrollableElement {
             this.onMiddleClick(node.element);
             return;
         }
-        if (node.item.collapsible || !this.opensOnSingleClick()) return;
+        if (!this.opensLikeLeaf(node) || !this.opensOnSingleClick()) return;
         this.setSelectedIndex(index);
         this.onActivate?.(node.element, OPEN_PINNED_IN_BACKGROUND);
     }
@@ -1340,7 +1347,7 @@ export class TreeViewElement<T> extends ScrollableElement {
 
         const node = this.flatNodes[index];
         if (this.inlineActionAt(node, event.localX) !== null) return;
-        if (!node.item.collapsible) {
+        if (this.opensLikeLeaf(node) && !this.isOnTwistie(node, this.scrollLeft + event.localX)) {
             this.onActivate?.(node.element, OPEN_PINNED);
             return;
         }
