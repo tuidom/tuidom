@@ -130,6 +130,8 @@ export class InputElement extends TUIElement {
         // Update horizontal scroll to keep cursor visible
         const dl = new DisplayLine(text);
         const cursorCol = dl.offsetToColumn(cursorOffset);
+        // Text that got shorter brings the scroll back: nothing stays hidden while it fits, the end cell is the cursor's.
+        this.scrollX = Math.min(this.scrollX, Math.max(0, dl.offsetToColumn(text.length) + 1 - contentWidth));
         if (cursorCol < this.scrollX) {
             this.scrollX = cursorCol;
         } else if (cursorCol >= this.scrollX + contentWidth) {
