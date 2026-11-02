@@ -16,6 +16,8 @@ const RIGHT_PAD = 1;
 const MIN_WIDTH = 16;
 /** Сколько пунктов участвует в измерении ширины (ответы LSP — тысячи пунктов). */
 const WIDTH_SAMPLE_LIMIT = 200;
+/** Квадратик пункта-цвета — тот же глиф, что у цветового декоратора в редакторе Diode. */
+const COLOR_SWATCH = "\u25A0";
 
 /**
  * Элемент списка автодополнения (payload `data` непрозрачен для TUIDom — там
@@ -27,6 +29,12 @@ export interface CompletionListItem {
     /** Сигнатура сразу за лейблом (`(a: string): void`), приглушённая. */
     readonly labelDetail?: string;
     readonly kind?: number;
+    /**
+     * Упакованный цвет (`packRgba`) пункта-цвета: вместо иконки вида рисуется квадратик
+     * этого цвета, как `colorspan` в suggest widget VS Code. Цвет из текста пункта
+     * извлекает хост.
+     */
+    readonly color?: number;
     /**
      * Текст, по которому пункт фильтруется, если он отличается от лейбла.
      * Не косметика: tsserver отдаёт после точки dot-accessor-пункты
@@ -248,12 +256,15 @@ export class CompletionListElement extends TUIElement {
         // нарисовал drawBox) не трогаем, иначе фон выделения залезает на рамку.
         for (let x = 1; x < w - 1; x++) context.setCell(x, rowY, { char: " ", fg: rowFg, bg: rowBg });
 
-        // Иконка типа
-        const icon = this.glyph(kindGlyphToken(item.kind));
-        context.drawText(2, rowY, icon, {
-            fg: isSelected ? rowFg : this.styleVar("editorSuggestWidget.iconForeground"),
-            bg: rowBg,
-        });
+        // Иконка типа; у пункта-цвета — квадратик его цвета, и на выбранном ряду тоже.
+        if (item.color !== undefined) {
+            context.drawText(2, rowY, COLOR_SWATCH, { fg: item.color, bg: rowBg });
+        } else {
+            context.drawText(2, rowY, this.glyph(kindGlyphToken(item.kind)), {
+                fg: isSelected ? rowFg : this.styleVar("editorSuggestWidget.iconForeground"),
+                bg: rowBg,
+            });
+        }
 
         // Правый блок: detail (dim, right-aligned)
         const contentRight = w - 1 - RIGHT_PAD; // exclusive
