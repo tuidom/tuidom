@@ -13,6 +13,32 @@ function renderInput(input: InputElement, width: number): MockTerminalBackend {
     return renderElement(input, width, height, { resolveStyles: true });
 }
 
+describe("InputElement — scroll after the text got shorter", () => {
+    const LONG = "a-very-long-value-that-does-not-fit";
+
+    it("text that fits again is drawn from its first character", () => {
+        const input = new InputElement();
+        input.inputState.value = LONG;
+        renderInput(input, 10);
+
+        input.inputState.value = "x.toml";
+        const backend = renderInput(input, 10);
+
+        expect(backend.screenToString()).toContain("x.toml");
+    });
+
+    it("text still wider than the field keeps its end in view with no empty space after it", () => {
+        const input = new InputElement();
+        input.inputState.value = `${LONG}${LONG}`;
+        renderInput(input, 10);
+
+        input.inputState.value = "0123456789abc";
+        const backend = renderInput(input, 10);
+
+        expect(backend.screenToString()).toContain("456789abc");
+    });
+});
+
 describe("InputElement — layout", () => {
     it("has height 1 without border", () => {
         const input = new InputElement();
