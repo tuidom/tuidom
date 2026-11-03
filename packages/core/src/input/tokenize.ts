@@ -624,6 +624,23 @@ export function parseCSI(data: string, start: number): CSITokenResult | null {
             /* v8 ignore stop */
             const kittyKey = kittyCodepointMap[encodedCodepoint];
             keyName = kittyKey ? kittyKey.key : undefined;
+            // A printable codepoint (tmux `extended-keys-format xterm`: Ctrl+Shift+E => CSI 27;6;101~,
+            // Ctrl+ф => CSI 27;5;1092~) is the same key as CSI <codepoint>;<mod>u — emit it as csi-u.
+            if (!kittyKey && encodedCodepoint >= 0x20 && encodedCodepoint <= 0x10ffff) {
+                const key = String.fromCodePoint(encodedCodepoint);
+                const token: CsiUToken = {
+                    kind: "csi-u",
+                    codepoint: encodedCodepoint,
+                    shiftedKey: undefined,
+                    baseLayoutKey: undefined,
+                    key,
+                    code: inferCode(key),
+                    ...decodeModifiers(mod),
+                    eventType,
+                    raw,
+                };
+                return { token, nextIndex };
+            }
         }
 
         // Complete tilde sequence (final byte present) but no known key — drop it, don't
