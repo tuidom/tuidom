@@ -131,11 +131,41 @@ describe("tokenize — malformed tilde and mouse sequences", () => {
         expect(tokens.some((t) => t.kind === "csi-tilde")).toBe(false);
     });
 
-    it("modifyOtherKeys with an unknown encoded codepoint → unknown-csi (\\x1b[27;5;99~)", () => {
-        // num === 27 but kittyCodepointMap[99] is undefined → keyName stays undefined; complete → dropped.
-        const tokens = tokenize("\x1b[27;5;99~");
-        expect(tokens).toEqual([{ kind: "unknown-csi", raw: "\x1b[27;5;99~" }]);
-        expect(tokens.some((t) => t.kind === "csi-tilde")).toBe(false);
+    it("modifyOtherKeys with an unknown control codepoint → unknown-csi (\\x1b[27;5;31~)", () => {
+        // num === 27, kittyCodepointMap[31] is undefined and 31 is below the printable range → dropped.
+        const tokens = tokenize("\x1b[27;5;31~");
+        expect(tokens).toEqual([{ kind: "unknown-csi", raw: "\x1b[27;5;31~" }]);
+    });
+
+    it("modifyOtherKeys with a codepoint past U+10FFFF → unknown-csi, not a throw (\\x1b[27;5;1114112~)", () => {
+        expect(tokenize("\x1b[27;5;1114112~")).toEqual([{ kind: "unknown-csi", raw: "\x1b[27;5;1114112~" }]);
+    });
+
+    it("modifyOtherKeys with the last valid codepoint U+10FFFF → csi-u (\\x1b[27;5;1114111~)", () => {
+        expect(tokenize("\x1b[27;5;1114111~")[0]).toMatchObject({ kind: "csi-u", codepoint: 0x10ffff });
+    });
+
+    it("modifyOtherKeys with a printable codepoint → csi-u with the key, inferred code and modifiers (\\x1b[27;5;99~)", () => {
+        expect(tokenize("\x1b[27;5;99~")).toEqual([
+            {
+                kind: "csi-u",
+                codepoint: 99,
+                shiftedKey: undefined,
+                baseLayoutKey: undefined,
+                key: "c",
+                code: "KeyC",
+                shiftKey: false,
+                altKey: false,
+                ctrlKey: true,
+                metaKey: false,
+                eventType: 0,
+                raw: "\x1b[27;5;99~",
+            },
+        ]);
+    });
+
+    it("modifyOtherKeys keeps the event type sub-parameter (\\x1b[27;5:3;99~ → release)", () => {
+        expect(tokenize("\x1b[27;5:3;99~")[0]).toMatchObject({ kind: "csi-u", eventType: 3 });
     });
 
     it("SGR mouse without exactly three parameters is a complete unknown sequence → unknown-csi (\\x1b[<0;10M)", () => {

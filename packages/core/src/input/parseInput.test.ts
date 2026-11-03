@@ -507,6 +507,52 @@ describe("parseInput", () => {
         expect(events).toEqual([kp("Tab", "\x1b[27;6;9~", { type: "keydown", ctrlKey: true, shiftKey: true })]);
     });
 
+    // ─── xterm modifyOtherKeys with a printable codepoint (tmux `extended-keys-format xterm`) ───
+
+    it("parses Ctrl+a via xterm modifyOtherKeys — CSI 27;5;97~", () => {
+        expect(parseInput("\x1b[27;5;97~")).toEqual([kp("a", "\x1b[27;5;97~", { code: "KeyA", ctrlKey: true })]);
+    });
+
+    it("parses Ctrl+Shift+A via xterm modifyOtherKeys — CSI 27;6;97~ uppercases the key", () => {
+        expect(parseInput("\x1b[27;6;97~")).toEqual([
+            kp("A", "\x1b[27;6;97~", { code: "KeyA", ctrlKey: true, shiftKey: true }),
+        ]);
+    });
+
+    it("parses Ctrl+ф via xterm modifyOtherKeys — CSI 27;5;1092~ maps to the physical KeyA", () => {
+        expect(parseInput("\x1b[27;5;1092~")).toEqual([kp("ф", "\x1b[27;5;1092~", { code: "KeyA", ctrlKey: true })]);
+    });
+
+    it("parses Ctrl+Shift+Х via xterm modifyOtherKeys — CSI 27;6;1093~ maps to BracketLeft", () => {
+        expect(parseInput("\x1b[27;6;1093~")).toEqual([
+            kp("Х", "\x1b[27;6;1093~", { code: "BracketLeft", ctrlKey: true, shiftKey: true }),
+        ]);
+    });
+
+    it("parses Ctrl+Alt+- via xterm modifyOtherKeys — CSI 27;7;45~", () => {
+        expect(parseInput("\x1b[27;7;45~")).toEqual([
+            kp("-", "\x1b[27;7;45~", { code: "Minus", ctrlKey: true, altKey: true }),
+        ]);
+    });
+
+    it("parses Ctrl+Space via xterm modifyOtherKeys — CSI 27;5;32~", () => {
+        expect(parseInput("\x1b[27;5;32~")).toEqual([kp(" ", "\x1b[27;5;32~", { code: "Space", ctrlKey: true })]);
+    });
+
+    it("xterm modifyOtherKeys gives the same event as CSI u for the same key", () => {
+        for (const [cp, mod] of [
+            [101, 6],
+            [1092, 5],
+            [1093, 6],
+            [45, 7],
+            [1105, 5],
+        ] as const) {
+            const [tilde] = parseInput(`\x1b[27;${mod};${cp}~`);
+            const [csiU] = parseInput(`\x1b[${cp};${mod}u`);
+            expect({ ...tilde, raw: "" }).toEqual({ ...csiU, raw: "" });
+        }
+    });
+
     it("parses Escape via CSI u — CSI 27;1:3 u (release) as keyup", () => {
         const events = parseInput("\x1b[27;1:3u");
         expect(events).toEqual([kp("Escape", "\x1b[27;1:3u", { type: "keyup" })]);
