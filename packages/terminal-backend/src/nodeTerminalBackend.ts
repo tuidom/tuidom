@@ -209,6 +209,10 @@ export class NodeTerminalBackend implements ITerminalBackend {
     private onResizeHandler: (() => void) | null = null;
     private resizeThrottleTimer: ReturnType<typeof setTimeout> | null = null;
     private resizeThrottleMs: number;
+    /** {@link setup} turns the keyboard protocols on itself (`extendedKeys` option, on by default). */
+    private readonly extendedKeysAtSetup: boolean;
+    /** The keyboard protocols are on — teardown owes the terminal their reset. */
+    private extendedKeysOn = false;
     private lastEmittedSize: Size | null = null;
     private resizePending = false;
     private cleanupHandlers: (() => void)[] = [];
@@ -236,11 +240,20 @@ export class NodeTerminalBackend implements ITerminalBackend {
     public constructor(
         stdin: NodeJS.ReadStream = process.stdin,
         stdout: NodeJS.WriteStream = process.stdout,
-        options?: { resizeThrottleMs?: number },
+        options?: {
+            resizeThrottleMs?: number;
+            /**
+             * Turn the keyboard protocols (modifyOtherKeys + Kitty push) on in {@link setup}.
+             * Default `true`. With `false` the terminal stays in legacy key encoding until the
+             * host calls {@link enableExtendedKeys}.
+             */
+            extendedKeys?: boolean;
+        },
     ) {
         this.stdin = stdin;
         this.stdout = stdout;
         this.resizeThrottleMs = options?.resizeThrottleMs ?? 100;
+        this.extendedKeysAtSetup = options?.extendedKeys ?? true;
         this.isTmux = isInsideTmux();
         this.isGnuScreen = isInsideGnuScreen();
         this.renderer = new TerminalRenderer(this.frameBuffer);
@@ -543,11 +556,14 @@ export class NodeTerminalBackend implements ITerminalBackend {
         return new Size(this.stdout.columns, this.stdout.rows);
     }
 
-    public setup(): void {
-        // Switch to alternate screen buffer
-        this.stdout.write("\x1b[?1049h");
-        // Show cursor (will be positioned by the focused element)
-        this.stdout.write("\x1b[?25h");
+    /**
+     * Turn the keyboard protocols on: xterm modifyOtherKeys and the Kitty push. A no-op when
+     * they are already on. {@link setup} calls it unless the `extendedKeys: false` option was
+     * passed; a host that starts in legacy calls it later (e.g. after a probe answered).
+     */
+    public enableExtendedKeys(): void {
+        if (this.extendedKeysOn) return;
+        this.extendedKeysOn = true;
         // Enable xterm modifyOtherKeys — tmux ignores the Kitty push but honors this,
         // delivering Ctrl+Tab / Ctrl+Shift+<key> as CSI-u. Direct, per-pane.
         // Порядок важен: ДО kitty-push. iTerm2 трактует любой `CSI > 4 ; n m` как сброс
@@ -557,6 +573,14 @@ export class NodeTerminalBackend implements ITerminalBackend {
         // Enable Kitty Keyboard Protocol — direct, so tmux tracks it per-pane (no passthrough).
         // Последним из клавиатурных режимов — см. выше.
         this.writeDirect(KITTY_ENABLE);
+    }
+
+    public setup(): void {
+        // Switch to alternate screen buffer
+        this.stdout.write("\x1b[?1049h");
+        // Show cursor (will be positioned by the focused element)
+        this.stdout.write("\x1b[?25h");
+        if (this.extendedKeysAtSetup) this.enableExtendedKeys();
         // Enable mouse tracking (all-motion mode for hover/enter/leave) — direct, per-pane
         this.writeDirect(MOUSE_TRACKING_ALL_ENABLE);
         // Enable bracketed paste so pastes arrive as one text block — direct, per-pane
@@ -618,10 +642,14 @@ export class NodeTerminalBackend implements ITerminalBackend {
     public teardown(): void {
         // Клавиатурные режимы снимаются в порядке, обратном setup (LIFO): сначала pop
         // kitty-флагов, который setup положил последним, затем сброс modifyOtherKeys.
-        // Disable Kitty Keyboard Protocol — direct (matches the per-pane enable in setup)
-        this.writeDirect(KITTY_DISABLE);
-        // Reset modifyOtherKeys — direct (matches the per-pane enable in setup)
-        this.writeDirect(MODIFY_OTHER_KEYS_DISABLE);
+        // Только если включали: pop без push снял бы чужие kitty-флаги (шелла под нами).
+        if (this.extendedKeysOn) {
+            // Disable Kitty Keyboard Protocol — direct (matches the per-pane enable)
+            this.writeDirect(KITTY_DISABLE);
+            // Reset modifyOtherKeys — direct (matches the per-pane enable)
+            this.writeDirect(MODIFY_OTHER_KEYS_DISABLE);
+            this.extendedKeysOn = false;
+        }
         // Disable mouse tracking — direct
         this.writeDirect(MOUSE_TRACKING_DISABLE);
         // Disable bracketed paste — direct (matches the per-pane enable in setup)

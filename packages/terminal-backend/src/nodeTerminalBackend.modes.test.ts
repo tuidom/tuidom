@@ -8,7 +8,7 @@ const MODIFY_OTHER_KEYS_ENABLE = "\x1b[>4;2m";
 const MODIFY_OTHER_KEYS_DISABLE = "\x1b[>4;0m";
 
 /** Двойники stdin/stdout: stdout копит записи, stdin умеет ровно то, что трогает setup/teardown. */
-function createBackend(): { backend: NodeTerminalBackend; output: () => string } {
+function createBackend(options?: { extendedKeys?: boolean }): { backend: NodeTerminalBackend; output: () => string } {
     const writes: string[] = [];
     const noop = (): void => {
         /* no-op */
@@ -30,7 +30,7 @@ function createBackend(): { backend: NodeTerminalBackend; output: () => string }
         on: noop,
         removeListener: noop,
     } as unknown as NodeJS.ReadStream;
-    return { backend: new NodeTerminalBackend(stdin, stdout), output: () => writes.join("") };
+    return { backend: new NodeTerminalBackend(stdin, stdout, options), output: () => writes.join("") };
 }
 
 describe("NodeTerminalBackend — порядок клавиатурных режимов", () => {
@@ -55,5 +55,43 @@ describe("NodeTerminalBackend — порядок клавиатурных реж
         const teardownOut = output().slice(setupLength);
         expect(teardownOut.indexOf(KITTY_POP)).toBeGreaterThanOrEqual(0);
         expect(teardownOut.indexOf(KITTY_POP)).toBeLessThan(teardownOut.indexOf(MODIFY_OTHER_KEYS_DISABLE));
+    });
+});
+
+describe("NodeTerminalBackend — extendedKeys: false", () => {
+    it("setup and teardown send no keyboard protocol sequences", () => {
+        const { backend, output } = createBackend({ extendedKeys: false });
+        backend.setup();
+        backend.teardown();
+
+        expect(output()).not.toContain(KITTY_PUSH);
+        expect(output()).not.toContain(KITTY_POP);
+        expect(output()).not.toContain(MODIFY_OTHER_KEYS_ENABLE);
+        expect(output()).not.toContain(MODIFY_OTHER_KEYS_DISABLE);
+    });
+
+    it("enableExtendedKeys turns both protocols on once, teardown resets them", () => {
+        const { backend, output } = createBackend({ extendedKeys: false });
+        backend.setup();
+        const setupLength = output().length;
+        backend.enableExtendedKeys();
+        backend.enableExtendedKeys();
+        expect(output().slice(setupLength)).toBe(MODIFY_OTHER_KEYS_ENABLE + KITTY_PUSH);
+
+        const enabledLength = output().length;
+        backend.teardown();
+        const teardownOut = output().slice(enabledLength);
+        expect(teardownOut).toContain(KITTY_POP);
+        expect(teardownOut).toContain(MODIFY_OTHER_KEYS_DISABLE);
+    });
+
+    it("a second teardown does not pop the kitty flags again", () => {
+        const { backend, output } = createBackend();
+        backend.setup();
+        backend.teardown();
+        const firstLength = output().length;
+        backend.teardown();
+
+        expect(output().slice(firstLength)).not.toContain(KITTY_POP);
     });
 });
