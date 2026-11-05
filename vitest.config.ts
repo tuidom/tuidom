@@ -17,7 +17,7 @@ export default defineConfig({
                 // прибавилось ни одной. Переякорено по факту, а не опущено под
                 // недостающие тесты.
                 statements: 99.58,
-                branches: 99.76,
+                branches: 99.79,
                 functions: 99,
                 lines: 99.64,
             },
