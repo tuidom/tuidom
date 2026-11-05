@@ -125,6 +125,7 @@ export class TreeViewElement<T> extends ScrollableElement {
      * заливает строку от края, а текст начинается со сдвигом.
      */
     private leftPadding: number;
+    private readonly inlineActionsRightPadding: number;
     /**
      * Текущие сегменты компактных строк по ключу. Строки без записи стоят на
      * последнем сегменте. Поколенческий, как {@link labelWidths}: строка, которую
@@ -187,6 +188,12 @@ export class TreeViewElement<T> extends ScrollableElement {
         provider: ITreeDataProvider<T>,
         options?: {
             leftPadding?: number;
+            /**
+             * Пустые колонки между последним inline-действием и правым краем
+             * viewport'а (или бейджем): отступ `ActionBar` строки эталона.
+             * Заливаются фоном строки, клик по ним — клик по строке. По умолчанию 0.
+             */
+            inlineActionsRightPadding?: number;
             expandOnlyOnTwistieClick?: boolean | ((element: T) => boolean);
             openOnSingleClick?: boolean | (() => boolean);
             renderIndentGuides?: TreeIndentGuides | (() => TreeIndentGuides);
@@ -195,6 +202,7 @@ export class TreeViewElement<T> extends ScrollableElement {
         super();
         this.focusable = true;
         this.leftPadding = options?.leftPadding ?? 0;
+        this.inlineActionsRightPadding = options?.inlineActionsRightPadding ?? 0;
         this.expandOnlyOnTwistieClick = options?.expandOnlyOnTwistieClick ?? true;
         this.openOnSingleClick = options?.openOnSingleClick ?? false;
         this.renderIndentGuides = options?.renderIndentGuides ?? "none";
@@ -661,7 +669,7 @@ export class TreeViewElement<T> extends ScrollableElement {
      * Раскладка inline-действий строки в координатах viewport'а: `spans` —
      * глифы `[start, end)` с номером действия, `[start, end)` — весь блок с
      * пробелом слева и, если справа бейдж или стрелка симлинка, пробелом перед
-     * ними. Не влезший глиф и всё левее него не рисуются. null — рисовать нечего.
+     * ними, плюс `inlineActionsRightPadding` колонок справа. Не влезший глиф и всё левее него не рисуются. null — рисовать нечего.
      * `row`: под мышью — глифы действий; курсор или выделение — `idleIcon`, где он
      * есть, иначе глиф действия; прочие строки — только `idleIcon`.
      */
@@ -677,6 +685,7 @@ export class TreeViewElement<T> extends ScrollableElement {
         if (node.item.symlink) right -= 1;
         const end = right;
         if (right < viewportWidth) right -= 1;
+        right -= this.inlineActionsRightPadding;
         const spans: InlineActionSpan[] = [];
         for (let index = actions.length - 1; index >= 0; index--) {
             const action = actions[index];

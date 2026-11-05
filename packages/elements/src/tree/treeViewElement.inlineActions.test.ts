@@ -59,8 +59,12 @@ function envRoots(): TestNode[] {
     ];
 }
 
-async function createTree(roots: TestNode[], width = 20): Promise<TreeViewElement<TestNode>> {
-    const tree = new TreeViewElement(createProvider(roots));
+async function createTree(
+    roots: TestNode[],
+    width = 20,
+    options?: { inlineActionsRightPadding?: number },
+): Promise<TreeViewElement<TestNode>> {
+    const tree = new TreeViewElement(createProvider(roots), options);
     tree.setStyleVars({
         "list.inactiveSelectionBackground": SELECTION_BG,
         "list.hoverBackground": HOVER_BG,
@@ -283,5 +287,94 @@ describe("TreeViewElement - inline actions", () => {
         expect(screen.getCell(new Point(9, 1)).style & StyleFlags.Underline).toBe(0);
         mouse(tree, "mousemove", 7, 1);
         expect(render(tree).getCell(new Point(7, 1)).style & StyleFlags.Underline).toBe(StyleFlags.Underline);
+    });
+});
+
+describe("TreeViewElement - inline actions right padding", () => {
+    const LONG = "averyveryverylongname";
+    const padded = (roots: TestNode[], width = 20): Promise<TreeViewElement<TestNode>> =>
+        createTree(roots, width, { inlineActionsRightPadding: 1 });
+
+    function cellAt(screen: TerminalScreen, x: number, y: number): string {
+        return screen.getCell(new Point(x, y)).char;
+    }
+
+    it("zero padding keeps the default layout", async () => {
+        const roots = (): TestNode[] => [
+            { id: "long", label: LONG, actions: [EDIT, OPEN] },
+            { id: "b", label: "b.go", actions: [EDIT], badge: "M", symlink: true },
+        ];
+        const plain = render(await createTree(roots()));
+        const zero = render(await createTree(roots(), 20, { inlineActionsRightPadding: 0 }));
+        expect([row(zero, 0), row(zero, 1)]).toEqual([row(plain, 0), row(plain, 1)]);
+    });
+
+    it("ends the last glyph one column left of the edge on the cursor row", async () => {
+        const screen = render(await padded(envRoots()));
+        expect(row(screen, 0)).toBe("  GOPATH        \uEA73 \uEB14");
+        expect(row(screen, 1)).toBe("  GOROOT");
+    });
+
+    it("fills the padding column with the row background over the label", async () => {
+        const tree = await padded([
+            { id: "a", label: LONG, actions: [EDIT] },
+            { id: "b", label: LONG, actions: [EDIT] },
+            { id: "c", label: LONG, actions: [EDIT] },
+        ]);
+        // Cursor on a, b selected too, mouse over c.
+        tree.dispatchEvent(new TUIKeyboardEvent("keypress", { key: "ArrowDown", shiftKey: true }));
+        mouse(tree, "mousemove", 3, 2);
+        const screen = render(tree);
+        for (let y = 0; y < 3; y++) {
+            expect(row(screen, y)).toBe("  averyveryverylo \uEA73");
+            expect(cellAt(screen, 19, y)).toBe(" ");
+            expect(cellAt(screen, 17, y)).toBe(" ");
+        }
+        expect(bgAt(screen, 19, 0)).toBe(SELECTION_BG);
+        expect(bgAt(screen, 19, 1)).toBe(SELECTION_BG);
+        expect(bgAt(screen, 19, 2)).toBe(HOVER_BG);
+        // Hovering the padding column does not highlight a glyph.
+        mouse(tree, "mousemove", 19, 2);
+        expect(bgAt(render(tree), 18, 2)).toBe(HOVER_BG);
+    });
+
+    it("puts the padding between the last glyph and the badge, which stays at the edge", async () => {
+        const screen = render(
+            await padded([{ id: "a", label: "a.go", actions: [EDIT], badge: "M", symlink: true }], 12),
+        );
+        expect(row(screen, 0)).toBe("  a.go \uEA73  \u21B5M");
+    });
+
+    it("counts the padding from the viewport's edge under horizontal scroll", async () => {
+        const tree = await padded([{ id: "long", label: "averyveryverylongname-tail", actions: [EDIT] }]);
+        tree.scrollTo(8, 0);
+        const screen = render(tree);
+        expect(row(screen, 0)).toBe("eryverylongname-t \uEA73");
+        expect(cellAt(screen, 19, 0)).toBe(" ");
+        const onInlineAction = vi.fn();
+        tree.onInlineAction = onInlineAction;
+        mouse(tree, "click", 18, 0);
+        expect(onInlineAction).toHaveBeenCalledWith(expect.objectContaining({ id: "long" }), 0);
+    });
+
+    it("a click on the padding column is a plain row click", async () => {
+        const tree = await padded(envRoots());
+        const onInlineAction = vi.fn();
+        const onActivate = vi.fn();
+        tree.onInlineAction = onInlineAction;
+        tree.onActivate = onActivate;
+        mouse(tree, "click", 19, 1);
+        expect(onInlineAction).not.toHaveBeenCalled();
+        expect(tree.getSelectedNode()).toEqual(expect.objectContaining({ id: "GOROOT" }));
+        mouse(tree, "dblclick", 19, 1);
+        expect(onActivate).toHaveBeenCalledTimes(1);
+        mouse(tree, "click", 18, 1);
+        expect(onInlineAction).toHaveBeenCalledWith(expect.objectContaining({ id: "GOROOT" }), 1);
+    });
+
+    it("keeps the padding while dropping glyphs that do not fit a narrow viewport", async () => {
+        const screen = render(await padded([{ id: "a", label: "abcdefgh", actions: [{ label: "Refresh" }, OPEN] }], 8));
+        expect(row(screen, 0)).toBe("  abc \uEB14");
+        expect(cellAt(screen, 7, 0)).toBe(" ");
     });
 });
