@@ -162,6 +162,49 @@ describe("TreeViewElement — refresh() поверх раскрытого дер
         expect(tree.contentHeight).toBe(1);
     });
 
+    for (const [name, reopen] of [
+        ["toggleExpand", (tree: TreeViewElement<TestNode>, node: TestNode) => tree.toggleExpand(node)],
+        ["expand", (tree: TreeViewElement<TestNode>, node: TestNode) => tree.expand(node)],
+        ["reveal", (tree: TreeViewElement<TestNode>, node: TestNode) => tree.reveal([node, node.children![0]])],
+    ] as const) {
+        it(`${name} после refresh() под свёрнутым предком показывает детей раскрытого потомка`, async () => {
+            const lib: TestNode = {
+                id: "src/lib",
+                label: "lib",
+                children: [
+                    { id: "src/lib/util", label: "util", children: [{ id: "src/lib/util/a.ts", label: "a.ts" }] },
+                ],
+            };
+            const roots: TestNode[] = [{ id: "src", label: "src", children: [lib] }];
+            const { tree, app } = createTree(roots);
+            await tree.refresh();
+            await tree.expandElements([roots[0], lib, lib.children![0]]);
+            await tree.toggleExpand(roots[0]);
+            await tree.refresh();
+
+            await reopen(tree, roots[0]);
+            app.render();
+
+            expect(tree.contentHeight).toBe(4);
+            expect(app.backend.screenToString()).toContain("a.ts");
+        });
+    }
+
+    it("повторное раскрытие с целым кэшем детей заново их не просит", async () => {
+        const lib: TestNode = { id: "src/lib", label: "lib", children: [{ id: "src/lib/a.ts", label: "a.ts" }] };
+        const roots: TestNode[] = [{ id: "src", label: "src", children: [lib] }];
+        const { tree, provider } = createTree(roots);
+        await tree.refresh();
+        await tree.expandElements([roots[0], lib]);
+        await tree.toggleExpand(roots[0]);
+        const getChildren = vi.spyOn(provider, "getChildren");
+
+        await tree.toggleExpand(roots[0]);
+
+        expect(getChildren.mock.calls).toEqual([]);
+        expect(tree.contentHeight).toBe(3);
+    });
+
     it("раскрытый узел, пропавший из данных, обход не ищет и детей у него не просит", async () => {
         const roots = filesWithMarkers(2, 1);
         const { tree, provider } = createTree(roots);
