@@ -244,10 +244,13 @@ export class TreeViewElement<T> extends ScrollableElement {
             this.expandedKeys.delete(key);
             this.onExpandedChanged?.(element, false);
         } else {
-            if (!this.childrenCache.has(key)) {
-                const children = await this.provider.getChildren(element);
+            let children = this.childrenCache.get(key);
+            if (children === undefined) {
+                children = await this.provider.getChildren(element);
                 this.childrenCache.set(key, children);
             }
+            const stale = this.loadStaleExpandedChildren(children);
+            if (stale !== undefined) await stale;
             this.expandedKeys.add(key);
             this.onExpandedChanged?.(element, true);
         }
@@ -282,12 +285,32 @@ export class TreeViewElement<T> extends ScrollableElement {
     private async expandElement(element: T): Promise<void> {
         const key = this.provider.getKey(element);
         if (this.expandedKeys.has(key)) return;
-        if (!this.childrenCache.has(key)) {
-            const children = await this.provider.getChildren(element);
+        let children = this.childrenCache.get(key);
+        if (children === undefined) {
+            children = await this.provider.getChildren(element);
             this.childrenCache.set(key, children);
         }
+        const stale = this.loadStaleExpandedChildren(children);
+        if (stale !== undefined) await stale;
         this.expandedKeys.add(key);
         this.onExpandedChanged?.(element, true);
+    }
+
+    /**
+     * Раскрытые потомки раскрываемого узла, чей кэш сбросил `refresh()`: свёрнутый
+     * узел помнит их раскрытость, а без догрузки они рисовались бы пустыми.
+     * Без таких — `undefined`, чтобы вызывающий не ждал лишний тик: жест раскрытия
+     * обязан закончиться за тот же микротаск, что и раньше.
+     */
+    private loadStaleExpandedChildren(children: readonly T[]): Promise<void> | undefined {
+        const stale = children.filter((child) => {
+            const childKey = this.provider.getKey(child);
+            return this.expandedKeys.has(childKey) && !this.childrenCache.has(childKey);
+        });
+        if (stale.length === 0) return undefined;
+        return (async () => {
+            for (const child of stale) await this.reloadExpandedChildren(child);
+        })();
     }
 
     /**
