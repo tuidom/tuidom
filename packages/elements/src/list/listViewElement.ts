@@ -2,7 +2,7 @@ import { BoxConstraints, Offset, Point, Rect, Size } from "@tuidom/core/common/g
 import type { TUIEventBase } from "@tuidom/core/dom/events/tuiEventBase";
 import type { TUIKeyboardEvent } from "@tuidom/core/dom/events/tuiKeyboardEvent";
 import { type TUIContextMenuEvent, TUIMouseEvent, type TUIMouseEventType } from "@tuidom/core/dom/events/tuiMouseEvent";
-import type { StyleResolutionContext } from "@tuidom/core/dom/styles/tuiStyle";
+import type { StyleColor, StyleResolutionContext } from "@tuidom/core/dom/styles/tuiStyle";
 import type { RenderContext } from "@tuidom/core/dom/tuiElement";
 import { TUIElement } from "@tuidom/core/dom/tuiElement";
 import type { CellPatch } from "@tuidom/core/rendering/grid";
@@ -13,6 +13,7 @@ const DEFAULT_INDENT_SIZE = 2;
 // Окно, в течение которого напечатанные символы складываются в одну последовательность
 // быстрого поиска; после паузы буфер сбрасывается (как в VS Code / файловых менеджерах).
 const TYPEAHEAD_TIMEOUT_MS = 800;
+const ROW_SEPARATOR_CHAR = "\u2500";
 
 /**
  * Состояние «строка под указателем ИЛИ под курсором сфокусированного списка» —
@@ -36,6 +37,23 @@ export interface IListRowOptions {
      * Сам typeahead выключается опцией конструктора `typeahead: false`.
      */
     readonly label?: string;
+    /**
+     * Высота строки в строках экрана (целое ≥ 1, по умолчанию 1). Вся строка —
+     * одна единица списка: курсор, выделение, hover, клик по любой её строке
+     * экрана и шаг стрелок относятся к ней целиком.
+     */
+    readonly height?: number;
+}
+
+export interface IListViewOptions {
+    readonly indentSize?: number;
+    readonly typeahead?: boolean;
+    /**
+     * Цвет разделителя: после каждой строки список рисует линию `─` во всю
+     * ширину. Линия — не часть строки: hover и выделение её не красят, клик по
+     * ней строку не выбирает. Не задан — разделителей нет.
+     */
+    readonly rowSeparatorColor?: StyleColor;
 }
 
 interface ListRow {
@@ -45,6 +63,7 @@ interface ListRow {
     readonly parentId: string | null;
     readonly depth: number;
     readonly label: string | undefined;
+    readonly height: number;
     hidden: boolean;
 }
 
@@ -88,14 +107,16 @@ class ListRowHostElement extends TUIElement {
             this.child,
             this.contentX,
             0,
-            BoxConstraints.tight(new Size(Math.max(0, size.width - this.contentX), 1)),
+            BoxConstraints.tight(new Size(Math.max(0, size.width - this.contentX), size.height)),
         );
         return size;
     }
 }
 
 /**
- * Виртуализирующий список: настоящие TUIElement-дети высотой ровно 1 строка.
+ * Виртуализирующий список: настоящие TUIElement-дети высотой в одну или
+ * несколько строк экрана ({@link IListRowOptions.height}). Прокрутка привязана
+ * к верху строки: инвариант вложенности не даёт показать строку наполовину.
  *
  * Потребитель императивно собирает произвольные строки-элементы и добавляет их
  * через {@link appendRow}; контейнер прячет внутри виртуализацию (layout и render
@@ -125,6 +146,7 @@ class ListRowHostElement extends TUIElement {
 export class ListViewElement extends ScrollableElement {
     private readonly indentSize: number;
     private readonly typeaheadEnabled: boolean;
+    private readonly rowSeparatorColor: StyleColor | null;
 
     private rowById = new Map<string, ListRow>();
     /** Дети по родителю в порядке добавления; ключ null — верхний уровень. */
@@ -134,6 +156,10 @@ export class ListViewElement extends ScrollableElement {
     /** Ленивая DFS-проекция видимых строк; null = требуется пересборка. */
     private visibleRows: ListRow[] | null = null;
     private visibleIndexById = new Map<string, number>();
+    /** Верхняя строка экрана каждой видимой строки (в строках контента), параллельно {@link visibleRows}. */
+    private rowTops: number[] = [];
+    /** Высота контента в строках экрана: сумма слотов (строка + разделитель). */
+    private contentLines = 0;
     private hasCollapsibleRows = false;
     /**
      * Окно строк, реально разложенное последним performLayout. Делегация кликов
@@ -144,6 +170,9 @@ export class ListViewElement extends ScrollableElement {
      */
     private lastLayoutScrollTop = -1;
     private lastLayoutViewportHeight = 0;
+    /** Индексы строк [start, end), разложенных последним performLayout. */
+    private lastLayoutStartIndex = 0;
+    private lastLayoutEndIndex = 0;
 
     private cursorIndex = 0;
     /**
@@ -167,11 +196,12 @@ export class ListViewElement extends ScrollableElement {
     public onCollapsedChanged: ((element: TUIElement, collapsed: boolean) => void) | null = null;
     public onContextMenu: ((element: TUIElement, screenX: number, screenY: number) => void) | null = null;
 
-    public constructor(options?: { indentSize?: number; typeahead?: boolean }) {
+    public constructor(options?: IListViewOptions) {
         super();
         this.focusable = true;
         this.indentSize = options?.indentSize ?? DEFAULT_INDENT_SIZE;
         this.typeaheadEnabled = options?.typeahead ?? true;
+        this.rowSeparatorColor = options?.rowSeparatorColor ?? null;
         // Смена фокуса входит в LIST_ROW_ACTIVE_STATE курсорной строки, а
         // FocusManager метит поддерево только style-грязным — раскрытие же
         // меняет ГЕОМЕТРИЮ строки, поэтому нужен пересчёт layout.
@@ -205,8 +235,13 @@ export class ListViewElement extends ScrollableElement {
             depth = parent.depth + 1;
         }
 
+        const height = options?.height ?? 1;
+        if (!Number.isInteger(height) || height < 1) {
+            throw new Error(`ListViewElement: row "${id}" height must be an integer >= 1 (got ${height})`);
+        }
+
         const host = new ListRowHostElement(element);
-        const row: ListRow = { element, host, id, parentId, depth, label: options?.label, hidden: false };
+        const row: ListRow = { element, host, id, parentId, depth, label: options?.label, height, hidden: false };
         this.rowById.set(id, row);
         let siblings = this.childIds.get(parentId);
         if (!siblings) {
@@ -228,6 +263,8 @@ export class ListViewElement extends ScrollableElement {
         this.selectedIds.clear();
         this.visibleRows = null;
         this.visibleIndexById.clear();
+        this.rowTops = [];
+        this.contentLines = 0;
         this.lastLayoutScrollTop = -1;
         this.cursorIndex = 0;
         this.cursorCleared = false;
@@ -359,14 +396,24 @@ export class ListViewElement extends ScrollableElement {
         }
     }
 
+    /** Курсор уходит на строку, накрывающую линию на страницу (высота вьюпорта − 1) ниже. */
     public focusPageDown(): void {
-        const pageSize = Math.max(1, this.layoutSize.height - 1);
-        this.setSelectedIndex(this.cursorIndex + pageSize);
+        this.setSelectedIndex(this.pageTargetIndex(1));
     }
 
     public focusPageUp(): void {
+        this.setSelectedIndex(this.pageTargetIndex(-1));
+    }
+
+    private pageTargetIndex(direction: 1 | -1): number {
+        const rows = this.ensureProjection();
+        if (rows.length === 0) return 0;
         const pageSize = Math.max(1, this.layoutSize.height - 1);
-        this.setSelectedIndex(this.cursorIndex - pageSize);
+        const current = Math.min(Math.max(this.cursorIndex, 0), rows.length - 1);
+        const line = Math.min(Math.max(this.rowTops[current] + direction * pageSize, 0), this.contentLines - 1);
+        const target = this.slotIndexAtLine(line);
+        // Строка выше страницы: шаг всё равно двигает курсор хотя бы на одну строку.
+        return target === current ? current + direction : target;
     }
 
     public focusFirst(): void {
@@ -379,8 +426,22 @@ export class ListViewElement extends ScrollableElement {
 
     // ─── ScrollableElement contract ───
 
+    /**
+     * Прокрутка привязана к началу строки ({@link snapScrollTop}): последняя
+     * позиция — верх строки, с которой хвост списка влезает целиком, поэтому под
+     * хвостом может остаться пустое место. Оно входит в высоту контента, чтобы
+     * бегунок и кламп скролла видели ту же последнюю позицию.
+     */
     public get contentHeight(): number {
-        return this.ensureProjection().length;
+        this.ensureProjection();
+        const viewportHeight = this.layoutSize.height;
+        const max = this.maxRowScrollTop(viewportHeight);
+        return max === 0 ? this.contentLines : Math.max(this.contentLines, max + viewportHeight);
+    }
+
+    /** Смещение всегда — верх строки: строка не бывает видна наполовину (вложенность Н2). */
+    public override scrollTo(left: number, top: number): void {
+        super.scrollTo(left, this.snapScrollTop(top, this.layoutSize.height));
     }
 
     public get contentWidth(): number {
@@ -416,12 +477,13 @@ export class ListViewElement extends ScrollableElement {
     protected override performLayout(constraints: BoxConstraints): Size {
         const size = super.performLayout(constraints);
         const rows = this.ensureProjection();
-        const start = this.scrollTop;
-        const end = Math.min(rows.length, start + size.height);
+        // Базовый кламп считал по прежнему вьюпорту — довязываем к строке по новому.
+        this.scrollTop = this.snapScrollTop(this.scrollTop, size.height);
+        const [start, end] = this.windowIndices(this.scrollTop, size.height);
         const listFocused = this.isFocused;
         for (let i = start; i < end; i++) {
             const row = rows[i];
-            const y = i - start;
+            const y = this.rowTops[i] - this.scrollTop;
             row.host.contentX = this.rowContentX(row);
             // Состояния строк синхронизируются здесь: layout идёт в кадре ДО
             // резолва стилей. Вариант ДЛЯ layout — без markDirty, иначе кадр
@@ -433,11 +495,15 @@ export class ListViewElement extends ScrollableElement {
                 LIST_ROW_ACTIVE_STATE,
                 i === this.hoveredIndex || (isCursor && listFocused),
             );
-            this.layoutChild(row.host, 0, y, BoxConstraints.tight(new Size(size.width, 1)));
+            // Строка выше вьюпорта (единственная в окне) режется по его высоте.
+            const height = Math.min(row.height, size.height - y);
+            this.layoutChild(row.host, 0, y, BoxConstraints.tight(new Size(size.width, height)));
         }
         this.invalidateRowsLeavingWindow(rows, start, end);
-        this.lastLayoutScrollTop = start;
+        this.lastLayoutScrollTop = this.scrollTop;
         this.lastLayoutViewportHeight = size.height;
+        this.lastLayoutStartIndex = start;
+        this.lastLayoutEndIndex = end;
         // Окно могло сместиться (скролл, пересборка проекции) — стилевой проход
         // этого же кадра обязан зайти в список и дорезолвить въехавшие строки,
         // остававшиеся style-dirty за кадром (смена темы/фокуса метит ВСЕ
@@ -464,8 +530,8 @@ export class ListViewElement extends ScrollableElement {
      */
     private invalidateRowsLeavingWindow(rows: readonly ListRow[], start: number, end: number): void {
         if (this.lastLayoutScrollTop < 0) return;
-        const prevEnd = Math.min(rows.length, this.lastLayoutScrollTop + this.lastLayoutViewportHeight);
-        for (let i = this.lastLayoutScrollTop; i < prevEnd; i++) {
+        const prevEnd = Math.min(rows.length, this.lastLayoutEndIndex);
+        for (let i = this.lastLayoutStartIndex; i < prevEnd; i++) {
             if (i < start || i >= end) {
                 // Именно флаг, а не markDirty(): тот пошёл бы вверх и оставил
                 // корень грязным после кадра (см. setStyleStateDuringLayout).
@@ -481,8 +547,8 @@ export class ListViewElement extends ScrollableElement {
      */
     protected override performChildrenStyleResolution(context: StyleResolutionContext): void {
         const rows = this.ensureProjection();
-        const end = Math.min(rows.length, this.scrollTop + this.layoutSize.height);
-        for (let i = this.scrollTop; i < end; i++) {
+        const [start, end] = this.windowIndices(this.scrollTop, this.layoutSize.height);
+        for (let i = start; i < end; i++) {
             rows[i].host.performStyleResolution(context);
         }
     }
@@ -528,8 +594,8 @@ export class ListViewElement extends ScrollableElement {
     private handleContextMenu(event: TUIContextMenuEvent): void {
         const rows = this.ensureProjection();
         if (event.trigger === "mouse") {
-            const index = this.scrollTop + event.localY;
-            if (index < 0 || index >= rows.length) return;
+            const index = this.rowIndexAtLocalY(event.localY);
+            if (index === null) return;
             const row = rows[index];
             // Не сбрасываем множественный выбор, если кликнули по уже выбранной строке.
             if (!this.selectedIds.has(row.id)) {
@@ -545,7 +611,7 @@ export class ListViewElement extends ScrollableElement {
         this.onContextMenu?.(
             rows[this.cursorIndex].element,
             this.globalPosition.x,
-            this.globalPosition.y + (this.cursorIndex - this.scrollTop),
+            this.globalPosition.y + (this.rowTops[this.cursorIndex] - this.scrollTop),
         );
     }
 
@@ -562,36 +628,125 @@ export class ListViewElement extends ScrollableElement {
         const clipTopY = Math.max(0, context.clipRect.y - context.offset.dy);
         const clipBottomY = Math.min(viewportHeight, context.clipRect.bottom - context.offset.dy);
 
+        // 1. Заливка фоном списка (гуттер, разделители и область за строками).
         for (let screenY = clipTopY; screenY < clipBottomY; screenY++) {
-            const rowIndex = scrollTop + screenY;
-
-            // 1. Заливка строки фоном списка (гуттер и область за строками).
             for (let x = 0; x < viewportWidth; x++) {
                 context.setCell(x, screenY, { char: " ", fg: resolved.fg, bg: resolved.bg, width: 1 });
             }
-            if (rowIndex >= rows.length) continue;
+        }
+
+        const [start, end] = this.windowIndices(scrollTop, viewportHeight);
+        const separatorFg = this.rowSeparatorColor === null ? null : this.resolveColor(this.rowSeparatorColor);
+        // Только строки, чьи слоты пересекают клип: частичный damage-кадр не платит за остальные.
+        const first = Math.max(start, this.slotIndexAtLine(scrollTop + clipTopY));
+        for (let rowIndex = first; rowIndex < end && this.rowTops[rowIndex] - scrollTop < clipBottomY; rowIndex++) {
             const row = rows[rowIndex];
+            const topY = this.rowTops[rowIndex] - scrollTop;
+            const bottomY = topY + row.height;
 
             // 2. Строка-обёртка: её when-состояния (hover/selected) уже
             // отрезолвлены каскадом — фон льёт база, дети наследуют результат.
+            // Клип строки пересекается с клипом кадра: вне него ничего не ляжет.
             const host = row.host;
             const hostOffset = new Offset(host.localPosition.dx, host.localPosition.dy);
             const hostClip = new Rect(host.globalPosition, host.layoutSize);
-            // Пустым hostClip быть не может: цикл уже ограничен строками клипа,
-            // а по горизонтали строка-хост занимает всю ширину вьюпорта.
             host.render(context.withOffset(hostOffset).withClip(hostClip));
 
-            // 3. Шеврон сворачиваемой строки — поверх, на фоне строки.
-            if (this.hasCollapsibleRows && this.rowHasChildren(row.id)) {
+            // 3. Шеврон сворачиваемой строки — поверх, на фоне строки, в её первой строке экрана.
+            if (topY >= clipTopY && this.hasCollapsibleRows && this.rowHasChildren(row.id)) {
                 const icon = this.collapsedIds.has(row.id) ? this.glyph("tree.collapsed") : this.glyph("tree.expanded");
-                context.setCell(row.depth * this.indentSize, screenY, {
+                context.setCell(row.depth * this.indentSize, topY, {
                     char: icon,
                     fg: this.styleVar("list.deemphasizedForeground"),
                     bg: host.resolvedStyle.bg,
                     width: 1,
                 });
             }
+
+            // 4. Разделитель под строкой — на фоне списка, вне подсветки строки.
+            if (separatorFg !== null && bottomY >= clipTopY && bottomY < clipBottomY) {
+                for (let x = 0; x < viewportWidth; x++) {
+                    context.setCell(x, bottomY, {
+                        char: ROW_SEPARATOR_CHAR,
+                        fg: separatorFg,
+                        bg: resolved.bg,
+                        width: 1,
+                    });
+                }
+            }
         }
+    }
+
+    // ─── Private: geometry ───
+
+    /** Строки экрана, которые занимает строка списка вместе с разделителем под ней. */
+    private slotHeight(row: ListRow): number {
+        return row.height + (this.rowSeparatorColor === null ? 0 : 1);
+    }
+
+    /**
+     * Индекс строки, чей слот (строка + разделитель) накрывает линию контента.
+     * Линия за концом контента — последняя строка. Проекция обязана быть материализована.
+     */
+    private slotIndexAtLine(line: number): number {
+        const tops = this.rowTops;
+        let lo = 0;
+        let hi = tops.length - 1;
+        while (lo < hi) {
+            const mid = (lo + hi + 1) >> 1;
+            if (tops[mid] <= line) lo = mid;
+            else hi = mid - 1;
+        }
+        return lo;
+    }
+
+    /** Строка под линией вьюпорта; `null` — за контентом или на разделителе. */
+    private rowIndexAtLocalY(localY: number): number | null {
+        const rows = this.ensureProjection();
+        const line = this.scrollTop + localY;
+        if (rows.length === 0 || line < 0 || line >= this.contentLines) return null;
+        const index = this.slotIndexAtLine(line);
+        if (line >= this.rowTops[index] + rows[index].height) return null; // разделитель
+        // Строка, срезанная низом вьюпорта, не разложена и не нарисована (см. windowIndices).
+        // Высота — последнего layout, а не layoutSize: геттер раскладывал бы список
+        // посреди клика и делал бы доверенным окно, которого на экране ещё нет.
+        const bottom = this.scrollTop + this.lastLayoutViewportHeight;
+        const cut = this.rowTops[index] < bottom && this.rowTops[index] + rows[index].height > bottom;
+        return cut && this.rowTops[index] !== this.scrollTop ? null : index;
+    }
+
+    /**
+     * Индексы строк [start, end), видимых в окне линий [scrollTop, scrollTop + height):
+     * только целиком влезающие — строка, не влезшая снизу, не раскладывается
+     * (на её месте фон). Исключение — строка выше вьюпорта: она одна в окне и режется.
+     */
+    private windowIndices(scrollTop: number, height: number): [number, number] {
+        const rows = this.ensureProjection();
+        if (rows.length === 0 || height <= 0 || scrollTop >= this.contentLines) return [0, 0];
+        const start = this.slotIndexAtLine(Math.max(0, scrollTop));
+        let end = start;
+        const bottom = scrollTop + height;
+        while (end < rows.length && this.rowTops[end] + rows[end].height <= bottom) end++;
+        return [start, end === start ? start + 1 : end];
+    }
+
+    /** Наибольшее смещение: верх первой строки, с которой хвост списка влезает целиком. */
+    private maxRowScrollTop(viewportHeight: number): number {
+        const rows = this.ensureProjection();
+        const lowest = this.contentLines - viewportHeight;
+        if (rows.length === 0 || lowest <= 0) return 0;
+        let index = this.slotIndexAtLine(lowest);
+        if (this.rowTops[index] < lowest && index + 1 < rows.length) index++;
+        return this.rowTops[index];
+    }
+
+    /** Линия контента → верх накрывающей её строки, в пределах [0, {@link maxRowScrollTop}]. */
+    private snapScrollTop(line: number, viewportHeight: number): number {
+        const rows = this.ensureProjection();
+        if (rows.length === 0) return 0;
+        const max = this.maxRowScrollTop(viewportHeight);
+        if (line >= max) return max;
+        return line <= 0 ? 0 : this.rowTops[this.slotIndexAtLine(line)];
     }
 
     // ─── Private: projection ───
@@ -600,6 +755,8 @@ export class ListViewElement extends ScrollableElement {
         if (this.visibleRows !== null) return this.visibleRows;
 
         const out: ListRow[] = [];
+        const tops: number[] = [];
+        let lines = 0;
         this.visibleIndexById.clear();
         let hasCollapsible = false;
         const walk = (parentId: string | null): void => {
@@ -612,11 +769,15 @@ export class ListViewElement extends ScrollableElement {
                 if (this.rowHasChildren(id)) hasCollapsible = true;
                 this.visibleIndexById.set(id, out.length);
                 out.push(row);
+                tops.push(lines);
+                lines += this.slotHeight(row);
                 if (!this.collapsedIds.has(id)) walk(id);
             }
         };
         walk(null);
         this.visibleRows = out;
+        this.rowTops = tops;
+        this.contentLines = lines;
         this.hasCollapsibleRows = hasCollapsible;
 
         // Курсор возвращается на прежнюю строку по id; если она пропала (скрыта,
@@ -671,12 +832,15 @@ export class ListViewElement extends ScrollableElement {
                 return;
             }
         }
+        const top = this.contentLines;
         this.visibleIndexById.set(row.id, rows.length);
         rows.push(row);
+        this.rowTops.push(top);
+        this.contentLines += this.slotHeight(row);
         // Строка попала в разложенное окно (контент короче вьюпорта), но сама ещё
         // не разложена — делегация кликов не должна доверять её ленивой позиции.
         // Append за окном делегацию не трогает: гард по концу окна отсеет индекс.
-        if (rows.length - 1 < this.lastLayoutScrollTop + this.lastLayoutViewportHeight) {
+        if (top < this.lastLayoutScrollTop + this.lastLayoutViewportHeight) {
             this.lastLayoutScrollTop = -1;
         }
     }
@@ -799,12 +963,20 @@ export class ListViewElement extends ScrollableElement {
         this.markDirty();
     }
 
+    /** Проматывает к строке целиком; строка выше вьюпорта прижимается верхом. */
     private ensureVisible(index: number): void {
+        const rows = this.ensureProjection();
         const viewportHeight = this.layoutSize.height;
-        if (index < this.scrollTop) {
-            this.scrollTo(this.scrollLeft, index);
-        } else if (index >= this.scrollTop + viewportHeight) {
-            this.scrollTo(this.scrollLeft, index - viewportHeight + 1);
+        const top = this.rowTops[index];
+        const bottom = top + rows[index].height;
+        if (top < this.scrollTop) {
+            this.scrollTo(this.scrollLeft, top);
+        } else if (bottom > this.scrollTop + viewportHeight) {
+            // Наименьший верх строки, при котором строка влезает целиком (не выше её самой).
+            const lowest = bottom - viewportHeight;
+            let first = this.slotIndexAtLine(lowest);
+            if (this.rowTops[first] < lowest) first++;
+            this.scrollTo(this.scrollLeft, Math.min(top, this.rowTops[first]));
         }
     }
 
@@ -979,7 +1151,7 @@ export class ListViewElement extends ScrollableElement {
      */
     private delegateToRowChild(index: number, row: ListRow, event: TUIMouseEvent): boolean {
         if (this.scrollTop !== this.lastLayoutScrollTop) return false;
-        if (index >= this.lastLayoutScrollTop + this.lastLayoutViewportHeight) return false;
+        if (index < this.lastLayoutStartIndex || index >= this.lastLayoutEndIndex) return false;
         const hit = row.element.elementFromPoint(new Point(event.screenX, event.screenY));
         if (hit === null || hit === row.element) return false;
         const synthetic = new TUIMouseEvent(event.type as TUIMouseEventType, {
@@ -997,8 +1169,8 @@ export class ListViewElement extends ScrollableElement {
 
     private handleClick(event: TUIMouseEvent): void {
         const rows = this.ensureProjection();
-        const index = this.scrollTop + event.localY;
-        if (index < 0 || index >= rows.length) return;
+        const index = this.rowIndexAtLocalY(event.localY);
+        if (index === null) return;
         const row = rows[index];
 
         if (event.button !== "left") return; // правый клик несёт событие contextmenu
@@ -1019,8 +1191,9 @@ export class ListViewElement extends ScrollableElement {
 
         this.setSelectedIndex(index);
 
-        // Клик по колонке шеврона сворачивает/раскрывает.
-        if (this.hasCollapsibleRows && this.rowHasChildren(row.id)) {
+        // Клик по колонке шеврона (первая строка экрана строки) сворачивает/раскрывает.
+        const onFirstLine = this.scrollTop + event.localY === this.rowTops[index];
+        if (onFirstLine && this.hasCollapsibleRows && this.rowHasChildren(row.id)) {
             const chevronX = row.depth * this.indentSize;
             if (event.localX >= chevronX && event.localX <= chevronX + 1) {
                 this.toggleCollapsed(row.id);
@@ -1030,8 +1203,8 @@ export class ListViewElement extends ScrollableElement {
 
     private handleDblClick(event: TUIMouseEvent): void {
         const rows = this.ensureProjection();
-        const index = this.scrollTop + event.localY;
-        if (index < 0 || index >= rows.length) return;
+        const index = this.rowIndexAtLocalY(event.localY);
+        if (index === null) return;
 
         const row = rows[index];
         if (this.delegateToRowChild(index, row, event)) return;
@@ -1043,9 +1216,7 @@ export class ListViewElement extends ScrollableElement {
     }
 
     private handleMouseMove(event: TUIMouseEvent): void {
-        const rows = this.ensureProjection();
-        const index = this.scrollTop + event.localY;
-        const newHovered = index >= 0 && index < rows.length ? index : null;
+        const newHovered = this.rowIndexAtLocalY(event.localY);
         if (newHovered !== this.hoveredIndex) {
             this.hoveredIndex = newHovered;
             this.markDirty();
@@ -1059,11 +1230,16 @@ export class ListViewElement extends ScrollableElement {
         }
     }
 
+    /** Три линии, но не меньше одной строки: прокрутка привязана к верху строки. */
     private handleWheel(event: TUIMouseEvent): void {
         if (event.wheelDirection === "up") {
             this.scrollBy(0, -3);
         } else if (event.wheelDirection === "down") {
-            this.scrollBy(0, 3);
+            const rows = this.ensureProjection();
+            if (rows.length === 0) return;
+            let index = this.slotIndexAtLine(this.scrollTop + 3);
+            if (this.rowTops[index] <= this.scrollTop && index + 1 < rows.length) index++;
+            this.scrollTo(this.scrollLeft, this.rowTops[index]);
         }
     }
 }
