@@ -54,6 +54,8 @@ export interface IListViewOptions {
      * ней строку не выбирает. Не задан — разделителей нет.
      */
     readonly rowSeparatorColor?: StyleColor;
+    /** См. {@link ListViewElement.openOnSingleClick}. */
+    readonly openOnSingleClick?: boolean | (() => boolean);
 }
 
 interface ListRow {
@@ -192,9 +194,16 @@ export class ListViewElement extends ScrollableElement {
     private typeaheadTimer: ReturnType<typeof setTimeout> | null = null;
 
     public onSelect: ((element: TUIElement) => void) | null = null;
+    /** Открыть строку: Enter, двойной клик по строке без детей, а с {@link openOnSingleClick} — и одиночный. */
     public onActivate: ((element: TUIElement) => void) | null = null;
     public onCollapsedChanged: ((element: TUIElement, collapsed: boolean) => void) | null = null;
     public onContextMenu: ((element: TUIElement, screenX: number, screenY: number) => void) | null = null;
+    /**
+     * Одиночный левый клик по строке без детей (без модификаторов) открывает её —
+     * `workbench.list.openMode: singleClick` эталона. Выключено по умолчанию:
+     * строку открывают двойной клик и Enter. Читается на каждом клике.
+     */
+    public openOnSingleClick: boolean | (() => boolean);
 
     public constructor(options?: IListViewOptions) {
         super();
@@ -202,6 +211,7 @@ export class ListViewElement extends ScrollableElement {
         this.indentSize = options?.indentSize ?? DEFAULT_INDENT_SIZE;
         this.typeaheadEnabled = options?.typeahead ?? true;
         this.rowSeparatorColor = options?.rowSeparatorColor ?? null;
+        this.openOnSingleClick = options?.openOnSingleClick ?? false;
         // Смена фокуса входит в LIST_ROW_ACTIVE_STATE курсорной строки, а
         // FocusManager метит поддерево только style-грязным — раскрытие же
         // меняет ГЕОМЕТРИЮ строки, поэтому нужен пересчёт layout.
@@ -1199,6 +1209,16 @@ export class ListViewElement extends ScrollableElement {
                 this.toggleCollapsed(row.id);
             }
         }
+
+        // Второй клик двойного тоже открывает — повтор того же открытия безвреден (как у дерева).
+        if (!this.rowHasChildren(row.id) && this.opensOnSingleClick()) {
+            this.onActivate?.(row.element);
+        }
+    }
+
+    private opensOnSingleClick(): boolean {
+        const single = this.openOnSingleClick;
+        return typeof single === "function" ? single() : single;
     }
 
     private handleDblClick(event: TUIMouseEvent): void {
