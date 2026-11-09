@@ -142,6 +142,7 @@ export class TerminalViewElement extends TUIElement {
             ctrl: event.ctrlKey,
             alt: event.altKey,
             shift: event.shiftKey,
+            ...(action === "down" || action === "up" ? { detail: event.detail } : {}),
         });
     }
 

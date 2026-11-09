@@ -903,3 +903,97 @@ describe("MouseEventDispatcher — nested enter/leave ancestor walk (explicit)",
         expect(rootEnters).toHaveLength(0);
     });
 });
+
+describe("MouseEventDispatcher — click count (detail)", () => {
+    function setup(): {
+        root: ContainerElement;
+        childA: TUIElement;
+        childB: TUIElement;
+        dispatcher: MouseEventDispatcher;
+        at: (ms: number) => void;
+    } {
+        const root = new ContainerElement();
+        root.setAsRoot();
+        layoutElement(root, new Point(0, 0), new Size(80, 24));
+        const childA = new TUIElement();
+        root.addChild(childA);
+        layoutElement(childA, new Point(0, 0), new Size(40, 24));
+        const childB = new TUIElement();
+        root.addChild(childB);
+        layoutElement(childB, new Point(40, 0), new Size(40, 24));
+        let time = 1000;
+        const dispatcher = new MouseEventDispatcher(() => time);
+        return {
+            root,
+            childA,
+            childB,
+            dispatcher,
+            at: (ms) => {
+                time = ms;
+            },
+        };
+    }
+
+    function click(
+        dispatcher: MouseEventDispatcher,
+        root: TUIElement,
+        x: number,
+        y = 3,
+        button: MouseToken["button"] = "left",
+    ): void {
+        dispatcher.handleMouseToken(makeToken({ action: "press", x, y, button }), root);
+        dispatcher.handleMouseToken(makeToken({ action: "release", x, y, button }), root);
+    }
+
+    it("counts presses in a row on one cell: 1, 2, 3, on mousedown, mouseup and click", () => {
+        const { root, childA, dispatcher, at } = setup();
+        const downs = collected(childA, "mousedown");
+        const ups = collected(childA, "mouseup");
+        const clicks = collected(childA, "click");
+        click(dispatcher, root, 5);
+        at(1200);
+        click(dispatcher, root, 5);
+        at(1400);
+        click(dispatcher, root, 5);
+        expect(downs.map((e) => e.detail)).toEqual([1, 2, 3]);
+        expect(ups.map((e) => e.detail)).toEqual([1, 2, 3]);
+        expect(clicks.map((e) => e.detail)).toEqual([1, 2, 3]);
+    });
+
+    it("starts over after the double-click threshold", () => {
+        const { root, childA, dispatcher, at } = setup();
+        const downs = collected(childA, "mousedown");
+        click(dispatcher, root, 5);
+        at(1299);
+        click(dispatcher, root, 5);
+        at(1599);
+        click(dispatcher, root, 5);
+        expect(downs.map((e) => e.detail)).toEqual([1, 2, 1]);
+    });
+
+    it("starts over on another column, row, element or button", () => {
+        const { root, childA, childB, dispatcher } = setup();
+        const downsA = collected(childA, "mousedown");
+        const downsB = collected(childB, "mousedown");
+        click(dispatcher, root, 5);
+        click(dispatcher, root, 6);
+        click(dispatcher, root, 6, 3, "right");
+        click(dispatcher, root, 6, 3, "right");
+        click(dispatcher, root, 6, 4, "right");
+        click(dispatcher, root, 41, 4, "right");
+        click(dispatcher, root, 41, 4, "right");
+        expect(downsA.map((e) => e.detail)).toEqual([1, 1, 1, 2, 1]);
+        expect(downsB.map((e) => e.detail)).toEqual([1, 2]);
+    });
+
+    it("carries 0 on moves and the wheel", () => {
+        const { root, childA, dispatcher } = setup();
+        const moves = collected(childA, "mousemove");
+        const wheels = collected(childA, "wheel");
+        click(dispatcher, root, 5);
+        dispatcher.handleMouseToken(makeToken({ action: "move", x: 7, y: 3 }), root);
+        dispatcher.handleMouseToken(makeToken({ action: "scroll-up", x: 7, y: 3 }), root);
+        expect(moves.map((e) => e.detail)).toEqual([0]);
+        expect(wheels.map((e) => e.detail)).toEqual([0]);
+    });
+});

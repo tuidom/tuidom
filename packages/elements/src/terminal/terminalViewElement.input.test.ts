@@ -192,6 +192,7 @@ describe("TerminalViewElement — mouse", () => {
         altKey?: boolean;
         shiftKey?: boolean;
         wheelDirection?: "up" | "down" | "left" | "right";
+        detail?: number;
     }): ConstructorParameters<typeof TUIMouseEvent>[1] {
         return {
             button: overrides.button ?? "left",
@@ -203,22 +204,35 @@ describe("TerminalViewElement — mouse", () => {
             altKey: overrides.altKey,
             shiftKey: overrides.shiftKey,
             wheelDirection: overrides.wheelDirection,
+            detail: overrides.detail,
         };
     }
 
     it("forwards mousedown with local coords and semantic button/action", () => {
         const { el, surface } = makeElement();
-        el.dispatchEvent(mouse("mousedown", { button: "left", localX: 4, localY: 2, ctrlKey: true }));
+        el.dispatchEvent(mouse("mousedown", { button: "left", localX: 4, localY: 2, ctrlKey: true, detail: 1 }));
         expect(surface.mouseEvents).toEqual([
-            { col: 4, row: 2, button: "left", action: "down", ctrl: true, alt: false, shift: false },
+            { col: 4, row: 2, button: "left", action: "down", ctrl: true, alt: false, shift: false, detail: 1 },
         ]);
     });
 
     it("forwards mouseup", () => {
         const { el, surface } = makeElement();
-        el.dispatchEvent(mouse("mouseup", { button: "right", localX: 1, localY: 1 }));
+        el.dispatchEvent(mouse("mouseup", { button: "right", localX: 1, localY: 1, detail: 1 }));
         expect(surface.mouseEvents).toEqual([
-            { col: 1, row: 1, button: "right", action: "up", ctrl: false, alt: false, shift: false },
+            { col: 1, row: 1, button: "right", action: "up", ctrl: false, alt: false, shift: false, detail: 1 },
+        ]);
+    });
+
+    it("forwards the click count of a press and its release (a double click selects a word in the host)", () => {
+        const { el, surface } = makeElement();
+        el.dispatchEvent(mouse("mousedown", { localX: 3, localY: 1, detail: 2 }));
+        el.dispatchEvent(mouse("mouseup", { localX: 3, localY: 1, detail: 2 }));
+        el.dispatchEvent(mouse("mousedown", { localX: 3, localY: 1, detail: 3 }));
+        expect(surface.mouseEvents.map((event) => [event.action, event.detail])).toEqual([
+            ["down", 2],
+            ["up", 2],
+            ["down", 3],
         ]);
     });
 
