@@ -32,6 +32,11 @@ export interface TerminalMouseEventData {
     ctrl: boolean;
     alt: boolean;
     shift: boolean;
+    /**
+     * Для `down`/`up` — номер нажатия в серии (DOM `MouseEvent.detail`): 1 — клик, 2 — двойной,
+     * 3 — тройной; хост по нему выделяет слово или строку. Нет поля — считать 1.
+     */
+    detail?: number;
 }
 
 export interface ITerminalSurface {

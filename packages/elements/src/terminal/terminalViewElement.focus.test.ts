@@ -16,6 +16,7 @@ function mousedown(): TUIMouseEvent {
         screenY: 2,
         localX: 3,
         localY: 2,
+        detail: 1,
     });
 }
 
@@ -31,7 +32,7 @@ describe("TerminalViewElement — focus on click", () => {
         expect(app.focusedElement).toBe(el);
         // Клик по-прежнему форвардится в PTY (мышиный режим шелла), фокус этому не мешает.
         expect(surface.mouseEvents).toEqual([
-            { col: 3, row: 2, button: "left", action: "down", ctrl: false, alt: false, shift: false },
+            { col: 3, row: 2, button: "left", action: "down", ctrl: false, alt: false, shift: false, detail: 1 },
         ]);
     });
 });

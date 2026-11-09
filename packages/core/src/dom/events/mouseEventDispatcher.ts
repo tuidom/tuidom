@@ -15,6 +15,12 @@ export class MouseEventDispatcher {
     private lastClickTime = 0;
     private lastClickTarget: TUIElement | null = null;
     private lastClickPosition: Point | null = null;
+    /** The `detail` of the current press: how many presses in a row landed on one cell of one element. */
+    private clickCount = 0;
+    private lastPressTime = 0;
+    private lastPressTarget: TUIElement | null = null;
+    private lastPressPosition: Point | null = null;
+    private lastPressButton: MouseToken["button"] | null = null;
     private lastPosition: Point | null = null;
     // Element under the pointer at the last token — unlike hoveredElement, also updated
     // by press/release and during capture, so a release off the captor resolves at once.
@@ -76,7 +82,28 @@ export class MouseEventDispatcher {
         if (!target) return;
         this.pressedElement = target;
         this.pressedButton = token.button;
+        this.countClick(target, token, screenX, screenY);
         this.dispatchOn(target, "mousedown", token, screenX, screenY);
+    }
+
+    /**
+     * DOM `MouseEvent.detail`: a press of the same button on the same cell of the same element
+     * within the double-click threshold of the previous press continues the series (2 — double,
+     * 3 — triple, …); anything else starts it over at 1.
+     */
+    private countClick(target: TUIElement, token: MouseToken, screenX: number, screenY: number): void {
+        const now = this.now();
+        const continues =
+            this.lastPressTarget === target &&
+            this.lastPressButton === token.button &&
+            this.lastPressPosition?.x === screenX &&
+            this.lastPressPosition.y === screenY &&
+            now - this.lastPressTime < DOUBLE_CLICK_THRESHOLD;
+        this.clickCount = continues ? this.clickCount + 1 : 1;
+        this.lastPressTime = now;
+        this.lastPressTarget = target;
+        this.lastPressButton = token.button;
+        this.lastPressPosition = new Point(screenX, screenY);
     }
 
     // True while a button is held on an element.
@@ -239,6 +266,8 @@ export class MouseEventDispatcher {
             shiftKey: token.shiftKey,
             altKey: token.altKey,
             ctrlKey: token.ctrlKey,
+            // A press, its release and its click carry the series' count; a move or the wheel carries 0.
+            detail: token.action === "press" || token.action === "release" ? this.clickCount : 0,
         };
     }
 }

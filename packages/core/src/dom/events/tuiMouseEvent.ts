@@ -23,6 +23,8 @@ export interface TUIMouseEventInit {
     altKey?: boolean;
     ctrlKey?: boolean;
     wheelDirection?: WheelDirection;
+    /** DOM `MouseEvent.detail`; 0 when absent. */
+    detail?: number;
 }
 
 const NON_BUBBLING_TYPES: ReadonlySet<string> = new Set(["mouseenter", "mouseleave"]);
@@ -37,6 +39,11 @@ export class TUIMouseEvent extends TUIEventBase {
     public readonly altKey: boolean;
     public readonly ctrlKey: boolean;
     public readonly wheelDirection: WheelDirection | undefined;
+    /**
+     * DOM `MouseEvent.detail`: on `mousedown`, `mouseup` and `click` — the number of presses in a
+     * row on one cell (1 — single, 2 — double, 3 — triple click); 0 on other events.
+     */
+    public readonly detail: number;
 
     public constructor(type: TUIMouseEventType, init: TUIMouseEventInit) {
         super(type, !NON_BUBBLING_TYPES.has(type));
@@ -49,6 +56,7 @@ export class TUIMouseEvent extends TUIEventBase {
         this.altKey = init.altKey ?? false;
         this.ctrlKey = init.ctrlKey ?? false;
         this.wheelDirection = init.wheelDirection;
+        this.detail = init.detail ?? 0;
     }
 }
 
