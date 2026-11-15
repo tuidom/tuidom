@@ -57,6 +57,32 @@ describe("ListViewElement collapse", () => {
         expect(list.contentHeight).toBe(2); // c остаётся спрятан под b
     });
 
+    it("a row appended collapsed hides the children added under it, without onCollapsedChanged", () => {
+        const list = new ListViewElement();
+        const onCollapsedChanged = vi.fn();
+        list.onCollapsedChanged = onCollapsedChanged;
+        list.appendRow(makeRow("a"), { collapsed: true });
+        list.appendRow(makeRow("b"), { parentId: "a" });
+        list.appendRow(makeRow("c"));
+
+        expect(list.contentHeight).toBe(2);
+        expect(list.isCollapsed("a")).toBe(true);
+        expect(onCollapsedChanged).not.toHaveBeenCalled();
+
+        list.setCollapsed("a", false);
+        expect(list.contentHeight).toBe(3);
+        expect(onCollapsedChanged).toHaveBeenCalledWith(list.getChildren()[0].getChildren()[0], false);
+    });
+
+    it("collapsed: false appends an expanded row", () => {
+        const list = new ListViewElement();
+        list.appendRow(makeRow("a"), { collapsed: false });
+        list.appendRow(makeRow("b"), { parentId: "a" });
+
+        expect(list.contentHeight).toBe(2);
+        expect(list.isCollapsed("a")).toBe(false);
+    });
+
     it("toggleCollapsed flips the state and fires onCollapsedChanged", () => {
         const list = makeGroupedList();
         const onCollapsedChanged = vi.fn();

@@ -43,6 +43,13 @@ export interface IListRowOptions {
      * экрана и шаг стрелок относятся к ней целиком.
      */
     readonly height?: number;
+    /**
+     * Строка добавляется свёрнутой: дети, добавленные под неё потом, скрыты, а
+     * шеврон смотрит вправо. {@link ListViewElement.onCollapsedChanged} при этом
+     * не зовётся — это начальное состояние, а не действие пользователя. Владелец,
+     * который пересобирает строки из своей модели, не ловит свои же события.
+     */
+    readonly collapsed?: boolean;
 }
 
 export interface IListViewOptions {
@@ -253,6 +260,7 @@ export class ListViewElement extends ScrollableElement {
         const host = new ListRowHostElement(element);
         const row: ListRow = { element, host, id, parentId, depth, label: options?.label, height, hidden: false };
         this.rowById.set(id, row);
+        if (options?.collapsed === true) this.collapsedIds.add(id);
         let siblings = this.childIds.get(parentId);
         if (!siblings) {
             siblings = [];
