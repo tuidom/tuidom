@@ -53,6 +53,26 @@ describe("ListViewElement virtualization", () => {
         expect(rows[0].layoutSize.width).toBe(20);
     });
 
+    it("an offset set before the first layout survives it: snapped to the new viewport, not reset", () => {
+        const { list, rows } = makeList(20);
+        list.scrollTop = Number.MAX_SAFE_INTEGER;
+
+        TestApp.createWithContent(list, new Size(20, 5));
+
+        expect(list.scrollTop).toBe(15);
+        expect(rows[19].layoutCalls).toBeGreaterThan(0);
+        expect(rows[0].layoutCalls).toBe(0);
+    });
+
+    it("an offset set before the first layout inside the content is snapped as is", () => {
+        const { list } = makeList(20);
+        list.scrollTop = 7;
+
+        TestApp.createWithContent(list, new Size(20, 5));
+
+        expect(list.scrollTop).toBe(7);
+    });
+
     it("scrolling shifts the layout window", () => {
         const { list, rows } = makeList(100);
         const app = TestApp.createWithContent(list, new Size(20, 5));

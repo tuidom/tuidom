@@ -493,10 +493,14 @@ export class ListViewElement extends ScrollableElement {
     }
 
     protected override performLayout(constraints: BoxConstraints): Size {
+        // Базовый кламп считает по contentHeight, а тот — по прежнему вьюпорту
+        // (у ещё не разложенного списка — по ленивому, во весь контент): смещение,
+        // выставленное до первого layout, он обнулил бы. Привязываем к строке
+        // по новому вьюпорту исходное смещение, а не результат базового клампа.
+        const requestedScrollTop = this.scrollTop;
         const size = super.performLayout(constraints);
         const rows = this.ensureProjection();
-        // Базовый кламп считал по прежнему вьюпорту — довязываем к строке по новому.
-        this.scrollTop = this.snapScrollTop(this.scrollTop, size.height);
+        this.scrollTop = this.snapScrollTop(requestedScrollTop, size.height);
         const [start, end] = this.windowIndices(this.scrollTop, size.height);
         const listFocused = this.isFocused;
         for (let i = start; i < end; i++) {
