@@ -452,7 +452,10 @@ export class ListViewElement extends ScrollableElement {
      */
     public get contentHeight(): number {
         this.ensureProjection();
-        const viewportHeight = this.layoutSize.height;
+        // Не layoutSize: декоратор скроллбара спрашивает высоту контента ДО layout
+        // списка, а ленивый layout по свободным ограничениям (вьюпорт во весь
+        // контент) привязал бы смещение к нулю и стёр выставленное заранее.
+        const viewportHeight = this.lastLayoutViewportHeight;
         const max = this.maxRowScrollTop(viewportHeight);
         return max === 0 ? this.contentLines : Math.max(this.contentLines, max + viewportHeight);
     }
@@ -462,9 +465,13 @@ export class ListViewElement extends ScrollableElement {
         super.scrollTo(left, this.snapScrollTop(top, this.layoutSize.height));
     }
 
+    // Геттер, а не поле: базовый класс объявляет contentWidth абстрактным аксессором.
+    // eslint-disable-next-line @typescript-eslint/class-literal-property-style
     public get contentWidth(): number {
-        // Горизонтального скролла нет: строки живут в ширине вьюпорта и клипятся справа.
-        return this.layoutSize.width;
+        // Горизонтального скролла нет: строки живут в ширине вьюпорта и клипятся
+        // справа. Ноль, а не ширина: не разложенный список ответил бы шириной
+        // ленивого layout, и декоратор на кадр показал бы горизонтальную полосу.
+        return 0;
     }
 
     // ─── TUIElement overrides ───
