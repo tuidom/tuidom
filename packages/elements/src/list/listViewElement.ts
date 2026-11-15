@@ -43,6 +43,13 @@ export interface IListRowOptions {
      * экрана и шаг стрелок относятся к ней целиком.
      */
     readonly height?: number;
+    /**
+     * Строка добавляется свёрнутой: дети, добавленные под неё потом, скрыты, а
+     * шеврон смотрит вправо. {@link ListViewElement.onCollapsedChanged} при этом
+     * не зовётся — это начальное состояние, а не действие пользователя. Владелец,
+     * который пересобирает строки из своей модели, не ловит свои же события.
+     */
+    readonly collapsed?: boolean;
 }
 
 export interface IListViewOptions {
@@ -253,6 +260,7 @@ export class ListViewElement extends ScrollableElement {
         const host = new ListRowHostElement(element);
         const row: ListRow = { element, host, id, parentId, depth, label: options?.label, height, hidden: false };
         this.rowById.set(id, row);
+        if (options?.collapsed === true) this.collapsedIds.add(id);
         let siblings = this.childIds.get(parentId);
         if (!siblings) {
             siblings = [];
@@ -444,7 +452,10 @@ export class ListViewElement extends ScrollableElement {
      */
     public get contentHeight(): number {
         this.ensureProjection();
-        const viewportHeight = this.layoutSize.height;
+        // Не layoutSize: декоратор скроллбара спрашивает высоту контента ДО layout
+        // списка, а ленивый layout по свободным ограничениям (вьюпорт во весь
+        // контент) привязал бы смещение к нулю и стёр выставленное заранее.
+        const viewportHeight = this.lastLayoutViewportHeight;
         const max = this.maxRowScrollTop(viewportHeight);
         return max === 0 ? this.contentLines : Math.max(this.contentLines, max + viewportHeight);
     }
@@ -454,9 +465,13 @@ export class ListViewElement extends ScrollableElement {
         super.scrollTo(left, this.snapScrollTop(top, this.layoutSize.height));
     }
 
+    // Геттер, а не поле: базовый класс объявляет contentWidth абстрактным аксессором.
+    // eslint-disable-next-line @typescript-eslint/class-literal-property-style
     public get contentWidth(): number {
-        // Горизонтального скролла нет: строки живут в ширине вьюпорта и клипятся справа.
-        return this.layoutSize.width;
+        // Горизонтального скролла нет: строки живут в ширине вьюпорта и клипятся
+        // справа. Ноль, а не ширина: не разложенный список ответил бы шириной
+        // ленивого layout, и декоратор на кадр показал бы горизонтальную полосу.
+        return 0;
     }
 
     // ─── TUIElement overrides ───
@@ -485,10 +500,14 @@ export class ListViewElement extends ScrollableElement {
     }
 
     protected override performLayout(constraints: BoxConstraints): Size {
+        // Базовый кламп считает по contentHeight, а тот — по прежнему вьюпорту
+        // (у ещё не разложенного списка — по ленивому, во весь контент): смещение,
+        // выставленное до первого layout, он обнулил бы. Привязываем к строке
+        // по новому вьюпорту исходное смещение, а не результат базового клампа.
+        const requestedScrollTop = this.scrollTop;
         const size = super.performLayout(constraints);
         const rows = this.ensureProjection();
-        // Базовый кламп считал по прежнему вьюпорту — довязываем к строке по новому.
-        this.scrollTop = this.snapScrollTop(this.scrollTop, size.height);
+        this.scrollTop = this.snapScrollTop(requestedScrollTop, size.height);
         const [start, end] = this.windowIndices(this.scrollTop, size.height);
         const listFocused = this.isFocused;
         for (let i = start; i < end; i++) {

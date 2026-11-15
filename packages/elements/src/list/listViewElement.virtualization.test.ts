@@ -4,6 +4,8 @@ import { TUIElement } from "@tuidom/core/dom/tuiElement";
 import { TestApp } from "@tuidom/testing/TestApp";
 import { describe, expect, it } from "vitest";
 
+import { ScrollBarDecorator } from "../scrollbar/scrollContainerElement.ts";
+
 import { ListViewElement } from "./listViewElement.ts";
 
 /** Строка-зонд: считает вызовы performLayout, чтобы видеть окно виртуализации. */
@@ -51,6 +53,38 @@ describe("ListViewElement virtualization", () => {
         expect(rows[3].globalPosition.y).toBe(3);
         expect(rows[0].layoutSize.height).toBe(1);
         expect(rows[0].layoutSize.width).toBe(20);
+    });
+
+    it("an offset set before the first layout survives it: snapped to the new viewport, not reset", () => {
+        const { list, rows } = makeList(20);
+        list.scrollTop = Number.MAX_SAFE_INTEGER;
+
+        TestApp.createWithContent(list, new Size(20, 5));
+
+        expect(list.scrollTop).toBe(15);
+        expect(rows[19].layoutCalls).toBeGreaterThan(0);
+        expect(rows[0].layoutCalls).toBe(0);
+    });
+
+    it("under a scrollbar decorator too: it reads the content size before the list is laid out", () => {
+        const { list, rows } = makeList(20);
+        list.scrollTop = Number.MAX_SAFE_INTEGER;
+
+        TestApp.createWithContent(new ScrollBarDecorator(list), new Size(20, 5));
+
+        expect(list.scrollTop).toBe(15);
+        // No horizontal bar: the list never scrolls sideways, all five lines are rows.
+        expect(list.layoutSize.height).toBe(5);
+        expect(rows[19].layoutCalls).toBeGreaterThan(0);
+    });
+
+    it("an offset set before the first layout inside the content is snapped as is", () => {
+        const { list } = makeList(20);
+        list.scrollTop = 7;
+
+        TestApp.createWithContent(list, new Size(20, 5));
+
+        expect(list.scrollTop).toBe(7);
     });
 
     it("scrolling shifts the layout window", () => {
@@ -131,11 +165,11 @@ describe("ListViewElement virtualization", () => {
     });
 
     it("строки, выпавшие из сузившегося окна, помечаются layout-грязными", () => {
-        // Ленивый layout (например, ScrollBarDecorator спросил contentWidth у
-        // ещё не разложенного списка) проходит по дефолтным 80×24 и раскладывает
-        // все строки; настоящий layout затем оставляет в окне лишь часть.
+        // Ленивый layout (кто-то прочёл layoutSize ещё не разложенного списка —
+        // хит-тест, инспектор, соседний виджет) проходит по дефолтным 80×24 и
+        // раскладывает все строки; настоящий layout затем оставляет в окне лишь часть.
         const { list, rows } = makeList(6);
-        expect(list.contentWidth).toBeGreaterThan(0); // дёргаем ленивый путь
+        expect(list.layoutSize.width).toBe(80); // дёргаем ленивый путь
         expect(rows[5].layoutSize.width).toBe(80);
 
         TestApp.createWithContent(list, new Size(20, 2));
