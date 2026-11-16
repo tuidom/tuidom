@@ -11,6 +11,15 @@ import { InputState } from "./inputState.ts";
 type LineRange = readonly [number, number];
 
 /**
+ * The line of `offset`: lines go up and are split by a line break, the offset belongs to the first that covers it;
+ * the last one ends at the end of the value. A function of the module, not a static: a class that names itself in its
+ * body is emitted by esbuild as `_InputElement`, and the constructor's name is what the inspector and tests select by.
+ */
+function lineIndexOf(ranges: readonly LineRange[], offset: number): number {
+    return ranges.findIndex(([, end]) => offset <= end);
+}
+
+/**
  * Text input widget: one line, or several with {@link InputElement.multiline}.
  *
  * By default rendered without a border — just a plain editable text line.
@@ -117,11 +126,6 @@ export class InputElement extends TUIElement {
         return ranges;
     }
 
-    private static lineIndexOf(ranges: readonly LineRange[], offset: number): number {
-        // Строки идут по возрастанию и разделены переводом строки: смещение принадлежит первой, что его накрывает.
-        // The last line ends at the end of the value: every offset of it is covered.
-        return ranges.findIndex(([, end]) => offset <= end);
-    }
 
     /** Строк в значении (у однострочного поля — 1). */
     public get lineCount(): number {
@@ -131,7 +135,7 @@ export class InputElement extends TUIElement {
     /** Строка курсора, с нуля. */
     public get cursorLine(): number {
         const state = this.inputState;
-        return InputElement.lineIndexOf(this.lineRanges(state.text), state.cursorOffset);
+        return lineIndexOf(this.lineRanges(state.text), state.cursorOffset);
     }
 
     private get visibleLines(): number {
@@ -177,7 +181,7 @@ export class InputElement extends TUIElement {
         if (contentWidth <= 0) return;
 
         const ranges = this.lineRanges(text);
-        const cursorLine = InputElement.lineIndexOf(ranges, view.cursorOffset);
+        const cursorLine = lineIndexOf(ranges, view.cursorOffset);
         const [cursorLineStart, cursorLineEnd] = ranges[cursorLine];
         const cursorLineText = new DisplayLine(text.slice(cursorLineStart, cursorLineEnd));
 
@@ -349,14 +353,14 @@ export class InputElement extends TUIElement {
     private cursorLineRange(): LineRange {
         const state = this.inputState;
         const ranges = this.lineRanges(state.text);
-        return ranges[InputElement.lineIndexOf(ranges, state.cursorOffset)];
+        return ranges[lineIndexOf(ranges, state.cursorOffset)];
     }
 
     /** To the same column of the next line up or down; past the first or the last line the key is the owner's. */
     private moveCursorVertically(event: TUIEventBase, delta: -1 | 1): void {
         const state = this.inputState;
         const ranges = this.lineRanges(state.text);
-        const line = InputElement.lineIndexOf(ranges, state.cursorOffset);
+        const line = lineIndexOf(ranges, state.cursorOffset);
         const target = ranges[line + delta] as LineRange | undefined;
         if (target === undefined) return;
         event.preventDefault();
