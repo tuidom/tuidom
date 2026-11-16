@@ -7,8 +7,11 @@ import { RenderContext, TUIElement } from "@tuidom/core/dom/tuiElement";
 
 import { InputState } from "./inputState.ts";
 
+/** A line of the value as `[start, end)` code units, without its line break. */
+type LineRange = readonly [number, number];
+
 /**
- * Single-line text input widget.
+ * Text input widget: one line, or several with {@link InputElement.multiline}.
  *
  * By default rendered without a border — just a plain editable text line.
  * Set `showBorder = true` to get a Unicode box-drawing frame around it.
@@ -32,8 +35,20 @@ export class InputElement extends TUIElement {
      */
     public maskChar: string | undefined = undefined;
     public onChange: ((value: string) => void) | undefined = undefined;
+    /**
+     * Многострочное поле: `\n` значения — перевод строки, поле растёт по числу
+     * строк до {@link maxVisibleLines} и прокручивается к курсору; стрелки
+     * вверх/вниз ходят по строкам, Home/End — по началу и концу строки, вставка
+     * сохраняет переводы строк. Перевод строки по клавише вставляет владелец
+     * (`inputState.insert("\n")`): у кого-то это Enter, у кого-то Shift+Enter.
+     * Стрелка вверх на первой строке и вниз на последней полем не съедаются.
+     */
+    public multiline = false;
+    /** Предел высоты многострочного поля в строках текста. */
+    public maxVisibleLines = 10;
 
     private scrollX = 0;
+    private scrollY = 0;
 
     public constructor(inputState?: InputState) {
         super();
@@ -89,6 +104,40 @@ export class InputElement extends TUIElement {
         };
     }
 
+    /** Строки значения: у однострочного поля — одна, во всё значение. */
+    private lineRanges(text: string): LineRange[] {
+        if (!this.multiline) return [[0, text.length]];
+        const ranges: LineRange[] = [];
+        let start = 0;
+        for (let i = text.indexOf("\n"); i !== -1; i = text.indexOf("\n", start)) {
+            ranges.push([start, i]);
+            start = i + 1;
+        }
+        ranges.push([start, text.length]);
+        return ranges;
+    }
+
+    private static lineIndexOf(ranges: readonly LineRange[], offset: number): number {
+        // Строки идут по возрастанию и разделены переводом строки: смещение принадлежит первой, что его накрывает.
+        // The last line ends at the end of the value: every offset of it is covered.
+        return ranges.findIndex(([, end]) => offset <= end);
+    }
+
+    /** Строк в значении (у однострочного поля — 1). */
+    public get lineCount(): number {
+        return this.lineRanges(this.inputState.text).length;
+    }
+
+    /** Строка курсора, с нуля. */
+    public get cursorLine(): number {
+        const state = this.inputState;
+        return InputElement.lineIndexOf(this.lineRanges(state.text), state.cursorOffset);
+    }
+
+    private get visibleLines(): number {
+        return this.multiline ? Math.max(1, Math.min(this.lineCount, this.maxVisibleLines)) : 1;
+    }
+
     // ─── Layout ─────────────────────────────────────────────────────────────
 
     public override getMinIntrinsicWidth(_height: number): number {
@@ -96,11 +145,11 @@ export class InputElement extends TUIElement {
     }
 
     public override getMinIntrinsicHeight(_width: number): number {
-        return this.showBorder ? 3 : 1;
+        return this.visibleLines + (this.showBorder ? 2 : 0);
     }
 
-    public override getMaxIntrinsicHeight(_width: number): number {
-        return this.showBorder ? 3 : 1;
+    public override getMaxIntrinsicHeight(width: number): number {
+        return this.getMinIntrinsicHeight(width);
     }
 
     protected override performLayout(constraints: BoxConstraints): Size {
@@ -118,24 +167,36 @@ export class InputElement extends TUIElement {
         // её символы со смещениями, пересчитанными в них.
         const view = this.displayView();
         const text = view.text;
-        const cursorOffset = view.cursorOffset;
         const focused = this.isFocused;
 
         const contentXStart = this.showBorder ? 1 : 0;
-        const contentY = this.showBorder ? 1 : 0;
+        const contentYStart = this.showBorder ? 1 : 0;
         const contentWidth = w - (this.showBorder ? 2 : 0);
+        const contentHeight = Math.max(1, h - (this.showBorder ? 2 : 0));
 
         if (contentWidth <= 0) return;
 
+        const ranges = this.lineRanges(text);
+        const cursorLine = InputElement.lineIndexOf(ranges, view.cursorOffset);
+        const [cursorLineStart, cursorLineEnd] = ranges[cursorLine];
+        const cursorLineText = new DisplayLine(text.slice(cursorLineStart, cursorLineEnd));
+
         // Update horizontal scroll to keep cursor visible
-        const dl = new DisplayLine(text);
-        const cursorCol = dl.offsetToColumn(cursorOffset);
+        const cursorCol = cursorLineText.offsetToColumn(view.cursorOffset - cursorLineStart);
+        const widest = Math.max(...ranges.map(([start, end]) => new DisplayLine(text.slice(start, end)).displayWidth));
         // Text that got shorter brings the scroll back: nothing stays hidden while it fits, the end cell is the cursor's.
-        this.scrollX = Math.min(this.scrollX, Math.max(0, dl.offsetToColumn(text.length) + 1 - contentWidth));
+        this.scrollX = Math.min(this.scrollX, Math.max(0, widest + 1 - contentWidth));
         if (cursorCol < this.scrollX) {
             this.scrollX = cursorCol;
         } else if (cursorCol >= this.scrollX + contentWidth) {
             this.scrollX = cursorCol - contentWidth + 1;
+        }
+        // The same for the lines: fewer lines bring the scroll back, the cursor's line stays in view.
+        this.scrollY = Math.min(this.scrollY, Math.max(0, ranges.length - contentHeight));
+        if (cursorLine < this.scrollY) {
+            this.scrollY = cursorLine;
+        } else if (cursorLine >= this.scrollY + contentHeight) {
+            this.scrollY = cursorLine - contentHeight + 1;
         }
 
         // Draw border
@@ -144,81 +205,77 @@ export class InputElement extends TUIElement {
         }
 
         const { fg, bg } = this.resolvedStyle;
-        // Fill content row background
-        for (let x = contentXStart; x < contentXStart + contentWidth; x++) {
-            context.setCell(x, contentY, { char: " ", fg, bg });
-        }
+        for (let row = 0; row < contentHeight; row++) {
+            const y = contentYStart + row;
+            // Fill content row background
+            for (let x = contentXStart; x < contentXStart + contentWidth; x++) {
+                context.setCell(x, y, { char: " ", fg, bg });
+            }
+            // Content area clip (screen-space coordinates)
+            const contentClip = new Rect(
+                new Point(this.globalPosition.x + contentXStart, this.globalPosition.y + y),
+                new Size(contentWidth, 1),
+            );
+            const textContext = context.withClip(contentClip);
 
-        // Content area clip (screen-space coordinates)
-        const contentClip = new Rect(
-            new Point(this.globalPosition.x + contentXStart, this.globalPosition.y + contentY),
-            new Size(contentWidth, 1),
-        );
-        const textContext = context.withClip(contentClip);
-
-        // Draw text or placeholder
-        if (text.length === 0 && this.placeholder !== undefined) {
-            textContext.drawText(contentXStart, contentY, this.placeholder, {
-                fg: this.styleVar("input.placeholderForeground"),
-                bg,
-            });
-        } else if (this.inputState.hasSelection) {
-            this.renderTextWithSelection(textContext, dl, text, view, contentXStart, contentY);
-        } else {
-            textContext.drawText(contentXStart - this.scrollX, contentY, text, { fg, bg });
+            if (text.length === 0) {
+                // Draw the placeholder
+                if (row === 0 && this.placeholder !== undefined) {
+                    textContext.drawText(contentXStart, y, this.placeholder, {
+                        fg: this.styleVar("input.placeholderForeground"),
+                        bg,
+                    });
+                }
+                continue;
+            }
+            const range = ranges[this.scrollY + row] as LineRange | undefined;
+            if (range === undefined) continue;
+            this.renderLine(textContext, text, range, view, contentXStart, y);
         }
 
         // Hardware cursor
         if (focused) {
             const cursorX = contentXStart + (cursorCol - this.scrollX);
-            /* v8 ignore start -- scrollX was just adjusted above to keep cursorCol within [scrollX, scrollX+contentWidth), so cursorX is always in bounds here; the false side is unreachable */
+            /* v8 ignore start -- the scrolls were just adjusted above to keep the cursor within the content, so it is always in bounds here; the false side is unreachable */
             if (cursorX >= contentXStart && cursorX < contentXStart + contentWidth) {
-                context.setCursorPosition(cursorX, contentY);
+                context.setCursorPosition(cursorX, contentYStart + cursorLine - this.scrollY);
             }
             /* v8 ignore stop */
         }
     }
 
-    private renderTextWithSelection(
+    /** One line of the value with the part of the selection that falls on it. */
+    private renderLine(
         context: RenderContext,
-        dl: DisplayLine,
         text: string,
+        [start, end]: LineRange,
         view: { selectionStart: number; selectionEnd: number },
         contentXStart: number,
-        contentY: number,
+        y: number,
     ): void {
-        // Границы выделения берём из представления: под маской они смещения в
-        // ней, а `text`/`dl` — тоже она.
-        const selStart = view.selectionStart;
-        const selEnd = view.selectionEnd;
-        const before = text.slice(0, selStart);
-        const selected = text.slice(selStart, selEnd);
-        const after = text.slice(selEnd);
-
-        const selStartCol = dl.offsetToColumn(selStart);
-        const selEndCol = dl.offsetToColumn(selEnd);
+        const line = text.slice(start, end);
         const { fg, bg } = this.resolvedStyle;
-
+        const x = contentXStart - this.scrollX;
+        // Границы выделения берём из представления: под маской они смещения в
+        // ней, а `text` — тоже она.
+        const selStart = Math.max(start, view.selectionStart) - start;
+        const selEnd = Math.min(end, view.selectionEnd) - start;
+        if (!this.inputState.hasSelection || selStart >= selEnd) {
+            context.drawText(x, y, line, { fg, bg });
+            return;
+        }
+        const dl = new DisplayLine(line);
+        const before = line.slice(0, selStart);
+        const after = line.slice(selEnd);
         if (before.length > 0) {
-            context.drawText(contentXStart - this.scrollX, contentY, before, { fg, bg });
+            context.drawText(x, y, before, { fg, bg });
         }
-        /* v8 ignore start -- this branch only runs when inputState.hasSelection (selStart !== selEnd), so the slice is always non-empty; the false side is unreachable */
-        if (selected.length > 0) {
-            context.drawText(contentXStart + selStartCol - this.scrollX, contentY, selected, {
-                fg,
-                bg: this.styleVar("input.selectionBackground"),
-            });
-        }
-        /* v8 ignore stop */
-        // Fill selection background for empty tail columns up to selEndCol (handles wide chars)
-        for (let col = selStartCol; col < selEndCol; col++) {
-            const x = contentXStart + col - this.scrollX;
-            // Overwrite only cells that didn't get text (will be spaces from background fill)
-            // drawText already covered the chars, this handles any residual slots
-            void x;
-        }
+        context.drawText(x + dl.offsetToColumn(selStart), y, line.slice(selStart, selEnd), {
+            fg,
+            bg: this.styleVar("input.selectionBackground"),
+        });
         if (after.length > 0) {
-            context.drawText(contentXStart + selEndCol - this.scrollX, contentY, after, { fg, bg });
+            context.drawText(x + dl.offsetToColumn(selEnd), y, after, { fg, bg });
         }
     }
 
@@ -231,8 +288,9 @@ export class InputElement extends TUIElement {
 
     protected override performDefaultAction(event: TUIEventBase): void {
         if (event.type === "paste") {
-            // Single-line field: flatten any newlines from the pasted block into spaces.
-            const text = (event as TUIPasteEvent).text.replace(/\n/g, " ");
+            // Single-line field: flatten any newlines from the pasted block into spaces; a multi-line one keeps them.
+            const pasted = (event as TUIPasteEvent).text;
+            const text = this.multiline ? pasted.replace(/\r\n?/g, "\n") : pasted.replace(/\n/g, " ");
             if (text !== "") {
                 event.preventDefault();
                 this.inputState.insert(text);
@@ -270,17 +328,42 @@ export class InputElement extends TUIElement {
             this.markDirty();
         } else if (keyEvent.key === "Home") {
             event.preventDefault();
-            this.inputState.moveCursorToStart();
+            if (this.multiline) this.inputState.moveCursorTo(this.cursorLineRange()[0]);
+            else this.inputState.moveCursorToStart();
             this.markDirty();
         } else if (keyEvent.key === "End") {
             event.preventDefault();
-            this.inputState.moveCursorToEnd();
+            if (this.multiline) this.inputState.moveCursorTo(this.cursorLineRange()[1]);
+            else this.inputState.moveCursorToEnd();
             this.markDirty();
+        } else if (this.multiline && (keyEvent.key === "ArrowUp" || keyEvent.key === "ArrowDown")) {
+            this.moveCursorVertically(event, keyEvent.key === "ArrowUp" ? -1 : 1);
         } else if (keyEvent.key.length === 1 && !keyEvent.ctrlKey && !keyEvent.altKey) {
             event.preventDefault();
             this.inputState.insert(keyEvent.key);
             this.onChange?.(this.inputState.value);
             this.markDirty();
         }
+    }
+
+    private cursorLineRange(): LineRange {
+        const state = this.inputState;
+        const ranges = this.lineRanges(state.text);
+        return ranges[InputElement.lineIndexOf(ranges, state.cursorOffset)];
+    }
+
+    /** To the same column of the next line up or down; past the first or the last line the key is the owner's. */
+    private moveCursorVertically(event: TUIEventBase, delta: -1 | 1): void {
+        const state = this.inputState;
+        const ranges = this.lineRanges(state.text);
+        const line = InputElement.lineIndexOf(ranges, state.cursorOffset);
+        const target = ranges[line + delta] as LineRange | undefined;
+        if (target === undefined) return;
+        event.preventDefault();
+        const [start, end] = ranges[line];
+        const column = new DisplayLine(state.text.slice(start, end)).offsetToColumn(state.cursorOffset - start);
+        const targetLine = new DisplayLine(state.text.slice(target[0], target[1]));
+        state.moveCursorTo(target[0] + targetLine.columnToOffset(column));
+        this.markDirty();
     }
 }

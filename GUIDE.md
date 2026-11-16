@@ -436,15 +436,15 @@ will be generated from source — see `docs/TODO/ApiReferenceGeneration.md`.
 | `PaddingContainerElement` | insets around a child |
 | `FillerElement` | empty area repainted with the inherited background |
 | **Text** | |
-| `TextLabelElement` | single-line label, per-char styling (`setCharStyle`) |
+| `TextLabelElement` | label with per-char styling (`setCharStyle`); one line, or wrapped to its width with `wrap = true` (as tall as the lines it takes) |
 | `TextBlockElement` | multi-line word-wrapped text, scrollable content |
 | **Controls** | |
 | `ButtonElement` | push button; `{ wrap: true }` wraps a label wider than the box by words |
-| `InputElement` | single-line text input; `maskChar` renders every grapheme as that glyph (password field) |
+| `InputElement` | text input; `maskChar` renders every grapheme as that glyph (password field); `multiline = true` — `\n` breaks lines, the field grows up to `maxVisibleLines`, Up/Down move between lines (and are left to the owner on the first/last line, see `cursorLine`/`lineCount`), Home/End go to the line's ends, a paste keeps its line breaks |
 | `SelectBoxElement` | dropdown select |
 | `CompletionListElement` / `CompletionWidgetElement` / `CompletionDetailsElement` | completion popup family |
 | **Lists** | |
-| `ListViewElement` | virtualized list of element rows (100k rows ≈ 1 ms/frame); cursor (`clearCursor()` — no current row), multi-select, typeahead, collapsible hierarchy; multi-line rows (`appendRow(el, { height })`, scrolling snaps to row tops) an optional separator line between rows (`rowSeparatorColor`); `openOnSingleClick` |
+| `ListViewElement` | virtualized list of element rows (100k rows ≈ 1 ms/frame); cursor (`clearCursor()` — no current row), multi-select, typeahead, collapsible hierarchy; multi-line rows (`appendRow(el, { height })`, scrolling snaps to row tops; `height: "auto"` — the row's own `getMinIntrinsicHeight` at the width it gets, measured again when the list width changes: wrapped text) an optional separator line between rows (`rowSeparatorColor`); `openOnSingleClick` |
 | `TreeViewElement` | data-driven tree (provider model) |
 | **Menus** | |
 | `MenuBarElement` / `MenuBarItemElement` | horizontal menu bar with mnemonics |

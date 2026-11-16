@@ -41,8 +41,13 @@ export interface IListRowOptions {
      * Высота строки в строках экрана (целое ≥ 1, по умолчанию 1). Вся строка —
      * одна единица списка: курсор, выделение, hover, клик по любой её строке
      * экрана и шаг стрелок относятся к ней целиком.
+     *
+     * `"auto"` — высоту назначает сама строка: `getMinIntrinsicHeight` её
+     * элемента при ширине, которая ей достаётся (переносящийся текст). Список
+     * перемеряет такие строки, когда меняется его ширина; до первого layout
+     * они в одну строку экрана.
      */
-    readonly height?: number;
+    readonly height?: number | "auto";
     /**
      * Строка добавляется свёрнутой: дети, добавленные под неё потом, скрыты, а
      * шеврон смотрит вправо. {@link ListViewElement.onCollapsedChanged} при этом
@@ -72,7 +77,9 @@ interface ListRow {
     readonly parentId: string | null;
     readonly depth: number;
     readonly label: string | undefined;
-    readonly height: number;
+    /** Для строки `"auto"` — последний замер (см. {@link ListViewElement.measureRow}). */
+    height: number;
+    readonly autoHeight: boolean;
     hidden: boolean;
 }
 
@@ -156,6 +163,9 @@ export class ListViewElement extends ScrollableElement {
     private readonly indentSize: number;
     private readonly typeaheadEnabled: boolean;
     private readonly rowSeparatorColor: StyleColor | null;
+    /** Ширина последнего layout: по ней меряются строки `"auto"`; 0 — layout ещё не было. */
+    private measureWidth = 0;
+    private autoRowCount = 0;
 
     private rowById = new Map<string, ListRow>();
     /** Дети по родителю в порядке добавления; ключ null — верхний уровень. */
@@ -252,14 +262,27 @@ export class ListViewElement extends ScrollableElement {
             depth = parent.depth + 1;
         }
 
-        const height = options?.height ?? 1;
+        const requested = options?.height ?? 1;
+        const autoHeight = requested === "auto";
+        const height = autoHeight ? 1 : requested;
         if (!Number.isInteger(height) || height < 1) {
             throw new Error(`ListViewElement: row "${id}" height must be an integer >= 1 (got ${height})`);
         }
 
         const host = new ListRowHostElement(element);
-        const row: ListRow = { element, host, id, parentId, depth, label: options?.label, height, hidden: false };
+        const row: ListRow = {
+            element,
+            host,
+            id,
+            parentId,
+            depth,
+            label: options?.label,
+            height,
+            autoHeight,
+            hidden: false,
+        };
         this.rowById.set(id, row);
+        if (autoHeight) this.autoRowCount++;
         if (options?.collapsed === true) this.collapsedIds.add(id);
         let siblings = this.childIds.get(parentId);
         if (!siblings) {
@@ -279,6 +302,7 @@ export class ListViewElement extends ScrollableElement {
         this.childIds.clear();
         this.collapsedIds.clear();
         this.selectedIds.clear();
+        this.autoRowCount = 0;
         this.visibleRows = null;
         this.visibleIndexById.clear();
         this.rowTops = [];
@@ -506,6 +530,11 @@ export class ListViewElement extends ScrollableElement {
         // по новому вьюпорту исходное смещение, а не результат базового клампа.
         const requestedScrollTop = this.scrollTop;
         const size = super.performLayout(constraints);
+        if (size.width !== this.measureWidth) {
+            this.measureWidth = size.width;
+            // Новая ширина — новые высоты переносящихся строк, а с ними и верхи.
+            if (this.autoRowCount > 0) this.invalidateProjection();
+        }
         const rows = this.ensureProjection();
         this.scrollTop = this.snapScrollTop(requestedScrollTop, size.height);
         const [start, end] = this.windowIndices(this.scrollTop, size.height);
@@ -784,8 +813,6 @@ export class ListViewElement extends ScrollableElement {
         if (this.visibleRows !== null) return this.visibleRows;
 
         const out: ListRow[] = [];
-        const tops: number[] = [];
-        let lines = 0;
         this.visibleIndexById.clear();
         let hasCollapsible = false;
         const walk = (parentId: string | null): void => {
@@ -798,16 +825,22 @@ export class ListViewElement extends ScrollableElement {
                 if (this.rowHasChildren(id)) hasCollapsible = true;
                 this.visibleIndexById.set(id, out.length);
                 out.push(row);
-                tops.push(lines);
-                lines += this.slotHeight(row);
                 if (!this.collapsedIds.has(id)) walk(id);
             }
         };
         walk(null);
+        // Высоты — после обхода: ширина строки зависит от гуттера шевронов, а он — от всей проекции.
+        this.hasCollapsibleRows = hasCollapsible;
+        const tops: number[] = [];
+        let lines = 0;
+        for (const row of out) {
+            this.measureRow(row);
+            tops.push(lines);
+            lines += this.slotHeight(row);
+        }
         this.visibleRows = out;
         this.rowTops = tops;
         this.contentLines = lines;
-        this.hasCollapsibleRows = hasCollapsible;
 
         // Курсор возвращается на прежнюю строку по id; если она пропала (скрыта,
         // свёрнута под родителя) — на ближайший оставшийся индекс, не прыгая наверх.
@@ -853,6 +886,11 @@ export class ListViewElement extends ScrollableElement {
             // Видимый родитель теперь точно с детьми — шеврон обязан появиться
             // (существенно для первого ребёнка: пересборки, которая выставила бы
             // hasCollapsibleRows, при инкрементальном пути не будет).
+            if (!this.hasCollapsibleRows && this.autoRowCount > 0) {
+                // Гуттер шевронов сужает все строки: переносящиеся перемеряются.
+                this.invalidateProjection();
+                return;
+            }
             this.hasCollapsibleRows = true;
             if (this.collapsedIds.has(row.parentId)) return; // строка невидима
             if (!this.isProjectionTail(row.parentId)) {
@@ -861,6 +899,7 @@ export class ListViewElement extends ScrollableElement {
                 return;
             }
         }
+        this.measureRow(row);
         const top = this.contentLines;
         this.visibleIndexById.set(row.id, rows.length);
         rows.push(row);
@@ -889,6 +928,13 @@ export class ListViewElement extends ScrollableElement {
             cursor = cursor.parentId !== null ? this.rowById.get(cursor.parentId) : undefined;
         }
         return false;
+    }
+
+    /** Высота строки `"auto"` по ширине, которая ей достаётся в последнем layout. */
+    private measureRow(row: ListRow): void {
+        if (!row.autoHeight || this.measureWidth === 0) return;
+        const width = Math.max(1, this.measureWidth - this.rowContentX(row));
+        row.height = Math.max(1, row.element.getMinIntrinsicHeight(width));
     }
 
     private invalidateProjection(): void {
