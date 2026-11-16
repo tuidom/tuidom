@@ -77,11 +77,18 @@ export class ScrollBarDecorator extends TUIElement {
     protected override performLayout(constraints: BoxConstraints): Size {
         const containerSize = super.performLayout(constraints);
 
-        const { showVertical, showHorizontal, markers } = this.resolveScrollBarVisibility(containerSize);
-        const childWidth = containerSize.width - (showVertical ? 1 : 0) - (markers === "outside" ? 1 : 0);
-        const childHeight = containerSize.height - (showHorizontal ? 1 : 0);
-
-        this.layoutChild(this.child, 0, 0, BoxConstraints.tight(new Size(childWidth, childHeight)));
+        const layOut = (): string => {
+            const { showVertical, showHorizontal, markers } = this.resolveScrollBarVisibility(containerSize);
+            const childWidth = containerSize.width - (showVertical ? 1 : 0) - (markers === "outside" ? 1 : 0);
+            const childHeight = containerSize.height - (showHorizontal ? 1 : 0);
+            this.layoutChild(this.child, 0, 0, BoxConstraints.tight(new Size(childWidth, childHeight)));
+            return `${String(childWidth)}x${String(childHeight)}`;
+        };
+        // Полосы решаются по размеру контента, а он мог стать другим от самого layout ребёнка: строки
+        // с переносом по новой ширине стали выше — и полоса нужна. Второй проход отдаёт ребёнку место
+        // под неё, иначе он остался бы разложенным под колонку, где рисуется полоса.
+        const first = layOut();
+        if (layOut() !== first) layOut();
 
         return containerSize;
     }
