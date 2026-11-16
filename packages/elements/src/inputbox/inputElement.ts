@@ -126,7 +126,6 @@ export class InputElement extends TUIElement {
         return ranges;
     }
 
-
     /** Строк в значении (у однострочного поля — 1). */
     public get lineCount(): number {
         return this.lineRanges(this.inputState.text).length;
