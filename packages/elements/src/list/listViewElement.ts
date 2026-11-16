@@ -192,6 +192,8 @@ export class ListViewElement extends ScrollableElement {
     /** Индексы строк [start, end), разложенных последним performLayout. */
     private lastLayoutStartIndex = 0;
     private lastLayoutEndIndex = 0;
+    /** Строки, разложенные последним performLayout (см. {@link invalidateRowsLeavingWindow}). */
+    private laidOutRows: readonly ListRow[] = [];
 
     private cursorIndex = 0;
     /**
@@ -308,6 +310,7 @@ export class ListViewElement extends ScrollableElement {
         this.rowTops = [];
         this.contentLines = 0;
         this.lastLayoutScrollTop = -1;
+        this.laidOutRows = [];
         this.cursorIndex = 0;
         this.cursorCleared = false;
         this.anchorIndex = 0;
@@ -583,19 +586,19 @@ export class ListViewElement extends ScrollableElement {
      * настоящий кладёт лишь пару видимых строк. Без этой уборки хвост остался
      * бы «чистым» с шириной 80 внутри 28-колоночного списка.
      *
-     * Цена — O(окна), а не O(N): переcборка проекции сюда не попадает (там
-     * строки и так новые, а `lastLayoutScrollTop` сброшен в -1).
+     * Помним сами строки окна, а не индексы: между кадрами проекцию
+     * пересобирают (добавили строки, сменилась ширина у строк `"auto"` —
+     * скроллбар появился и сузил список), и прежние индексы уже о другом, а
+     * строки те же. Цена — O(окна), а не O(N).
      */
     private invalidateRowsLeavingWindow(rows: readonly ListRow[], start: number, end: number): void {
-        if (this.lastLayoutScrollTop < 0) return;
-        const prevEnd = Math.min(rows.length, this.lastLayoutEndIndex);
-        for (let i = this.lastLayoutStartIndex; i < prevEnd; i++) {
-            if (i < start || i >= end) {
-                // Именно флаг, а не markDirty(): тот пошёл бы вверх и оставил
-                // корень грязным после кадра (см. setStyleStateDuringLayout).
-                rows[i].host.isLayoutDirty = true;
-            }
+        const window = new Set(rows.slice(start, end));
+        for (const row of this.laidOutRows) {
+            // Именно флаг, а не markDirty(): тот пошёл бы вверх и оставил
+            // корень грязным после кадра (см. setStyleStateDuringLayout).
+            if (!window.has(row)) row.host.isLayoutDirty = true;
         }
+        this.laidOutRows = [...window];
     }
 
     /**
