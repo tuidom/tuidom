@@ -221,6 +221,46 @@ describe("HFlexElement", () => {
         });
     });
 
+    describe("height of a wrapping fill child", () => {
+        // 12 columns of text: as many lines as the width it gets fits 12 columns into.
+        class WrappingElement extends TUIElement {
+            public readonly asked: number[] = [];
+            public override getMaxIntrinsicWidth(_height: number): number {
+                return 12;
+            }
+            public override getMinIntrinsicHeight(width: number): number {
+                this.asked.push(width);
+                return Math.ceil(12 / Math.max(1, width));
+            }
+            public override getMaxIntrinsicHeight(width: number): number {
+                return this.getMinIntrinsicHeight(width);
+            }
+        }
+
+        it("is measured at the width the fixed and fit children leave it", () => {
+            const flex = new HFlexElement();
+            const text = new WrappingElement();
+            flex.addChild(new FixedSizeElement(2, 1), { width: hflexFixed(2), height: 1 });
+            flex.addChild(text, { width: hflexFill(), height: "fill" });
+            flex.addChild(new FixedSizeElement(4, 1), { width: hflexFit(), height: 1 });
+
+            expect(flex.getMinIntrinsicHeight(10)).toBe(3);
+            expect(flex.getMaxIntrinsicHeight(10)).toBe(3);
+            expect(text.asked).toEqual([4, 4]);
+            expect(flex.getMinIntrinsicHeight(18)).toBe(1);
+        });
+
+        it("measures a fit child of fill height at one line and gives nothing below zero", () => {
+            const flex = new HFlexElement();
+            const text = new WrappingElement();
+            flex.addChild(text, { width: hflexFill(), height: "fill" });
+            flex.addChild(new WrappingElement(), { width: hflexFit(), height: "fill" });
+
+            expect(flex.getMinIntrinsicHeight(10)).toBe(12);
+            expect(text.asked).toEqual([0]);
+        });
+    });
+
     describe("getMinIntrinsicHeight", () => {
         it("is the max of fixed children's heights", () => {
             const flex = new HFlexElement();

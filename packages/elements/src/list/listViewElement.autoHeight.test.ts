@@ -2,6 +2,7 @@ import { Point, Size } from "@tuidom/core/common/geometryPromitives";
 import { TestApp } from "@tuidom/testing/TestApp";
 import { describe, expect, it } from "vitest";
 
+import { ScrollBarDecorator } from "../scrollbar/scrollContainerElement.ts";
 import { TextLabelElement } from "../text/textLabelElement.ts";
 
 import { ListViewElement } from "./listViewElement.ts";
@@ -44,6 +45,22 @@ describe("ListViewElement rows of auto height", () => {
         app.render();
 
         expect(lines(app, 3, 6)).toEqual(["aaaaaa", "aaaaaa", "bb"]);
+    });
+
+    it("a row that leaves the window as the width changes is laid out anew, not left at the old width", () => {
+        const list = new ListViewElement();
+        const first = wrapping("a", "a".repeat(9));
+        list.appendRow(first, { height: "auto" });
+        const app = TestApp.createWithContent(new ScrollBarDecorator(list), new Size(6, 4));
+        expect(first.layoutSize.width).toBe(6);
+
+        // The rows come and the list follows its tail: the scrollbar takes a column and the first row is out of the
+        // new window. The test app checks after the frame that no child sticks out of its parent.
+        for (const id of ["b", "c", "d"]) list.appendRow(wrapping(id, id.repeat(9)), { height: "auto" });
+        list.scrollTop = Number.MAX_SAFE_INTEGER;
+        app.render();
+
+        expect(lines(app, 4, 5)).toEqual(["ccccc", "cccc", "ddddd", "dddd"]);
     });
 
     it("measures a row appended after the layout at the known width", () => {

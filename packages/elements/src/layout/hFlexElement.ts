@@ -77,7 +77,7 @@ export class HFlexElement extends TUIElement {
         for (const child of this.getChildren()) {
             const style = child.layoutStyle as HFlexLayoutStyle;
             if (style.height === "fill") {
-                max = Math.max(max, child.getMinIntrinsicHeight(width));
+                max = Math.max(max, child.getMinIntrinsicHeight(this.childWidthWithin(child, width)));
             } else {
                 max = Math.max(max, style.height);
             }
@@ -90,12 +90,33 @@ export class HFlexElement extends TUIElement {
         for (const child of this.getChildren()) {
             const style = child.layoutStyle as HFlexLayoutStyle;
             if (style.height === "fill") {
-                max = Math.max(max, child.getMaxIntrinsicHeight(width));
+                max = Math.max(max, child.getMaxIntrinsicHeight(this.childWidthWithin(child, width)));
             } else {
                 max = Math.max(max, style.height);
             }
         }
         return max;
+    }
+
+    /**
+     * The width a child gets in a container of `width` columns, as {@link performLayout} gives it: the fill child
+     * gets what the fixed and fit children leave (a wrapping text is as tall as the lines it gets there). A fit
+     * child of fill height is measured at one line: the container's height is what is being asked.
+     */
+    private childWidthWithin(child: TUIElement, width: number): number {
+        const childStyle = child.layoutStyle as HFlexLayoutStyle;
+        if (childStyle.width.type !== "fill") return HFlexElement.fixedOrFitWidth(child);
+        let taken = 0;
+        for (const sibling of this.getChildren()) {
+            if (sibling !== child) taken += HFlexElement.fixedOrFitWidth(sibling);
+        }
+        return Math.max(0, width - taken);
+    }
+
+    private static fixedOrFitWidth(child: TUIElement): number {
+        const style = child.layoutStyle as HFlexLayoutStyle;
+        if (style.width.type === "fixed") return style.width.value;
+        return child.getMaxIntrinsicWidth(style.height === "fill" ? 1 : style.height);
     }
 
     // ─── Layout ───
