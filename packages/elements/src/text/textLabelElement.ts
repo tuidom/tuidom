@@ -12,12 +12,21 @@ export interface StyledChar {
 }
 
 export class TextLabelElement extends TUIElement {
+    /**
+     * Перенос по ширине: текст, не влезший в строку, продолжается на следующей
+     * (по графемам, как терминал), а высота лейбла — число получившихся строк.
+     * Выключен — одна строка, хвост срезается справа.
+     */
+    public wrap = false;
     private text: string;
     private charStyles = new Map<number, StyledChar>();
     // Сегментация — O(длины текста) на каждое построение DisplayLine, а лейбл
     // строил его дважды за кадр (layout + render). Кэш живёт до setText;
     // charStyles/цвета на текст не влияют и кэш не трогают.
     private cachedDisplayLine: DisplayLine | null = null;
+    /** Строки переноса последней ширины: список спрашивает высоту каждой строки при каждой пересборке. */
+    private cachedWrap: { readonly width: number; readonly lines: readonly (readonly [number, number])[] } | null =
+        null;
 
     public constructor(text: string) {
         super();
@@ -35,6 +44,7 @@ export class TextLabelElement extends TUIElement {
     public setText(text: string): void {
         this.text = text;
         this.cachedDisplayLine = null;
+        this.cachedWrap = null;
         this.markDirty();
     }
 
@@ -60,32 +70,71 @@ export class TextLabelElement extends TUIElement {
         return this.displayLine.displayWidth;
     }
 
-    public override getMinIntrinsicHeight(_width: number): number {
-        return 1;
+    public override getMinIntrinsicHeight(width: number): number {
+        return this.wrap ? this.wrappedLines(width).length : 1;
     }
 
-    public override getMaxIntrinsicHeight(_width: number): number {
-        return 1;
+    public override getMaxIntrinsicHeight(width: number): number {
+        return this.getMinIntrinsicHeight(width);
     }
 
     protected override performLayout(constraints: BoxConstraints): Size {
-        const natural = new Size(this.getMaxIntrinsicWidth(1), this.getMaxIntrinsicHeight(0));
+        if (this.wrap && Number.isFinite(constraints.maxWidth)) {
+            const width = constraints.maxWidth;
+            const natural = new Size(Math.min(width, this.getMaxIntrinsicWidth(1)), this.getMaxIntrinsicHeight(width));
+            return super.performLayout(BoxConstraints.tight(constraints.constrain(natural)));
+        }
+        const natural = new Size(this.getMaxIntrinsicWidth(1), 1);
         return super.performLayout(BoxConstraints.tight(constraints.constrain(natural)));
     }
 
+    /**
+     * Границы строк переноса как `[start, end)` в code units: строка набирает
+     * графемы, пока они влезают в `width`; графема шире строки занимает строку
+     * одна. Пустой текст — одна пустая строка.
+     */
+    private wrappedLines(width: number): readonly (readonly [number, number])[] {
+        if (this.cachedWrap?.width === width) return this.cachedWrap.lines;
+        const lines: [number, number][] = [];
+        let start = 0;
+        let used = 0;
+        for (const slot of this.displayLine.slots) {
+            if (used > 0 && used + slot.displayWidth > width) {
+                lines.push([start, slot.offset]);
+                start = slot.offset;
+                used = 0;
+            }
+            used += slot.displayWidth;
+        }
+        lines.push([start, this.text.length]);
+        this.cachedWrap = { width, lines };
+        return lines;
+    }
+
     public override render(context: RenderContext): void {
-        const width = this.layoutSize.width;
+        if (!this.wrap) {
+            this.renderLine(context, 0, 0, this.text.length, this.displayLine);
+            return;
+        }
+        const lines = this.wrappedLines(this.layoutSize.width);
+        for (let y = 0; y < Math.min(lines.length, this.layoutSize.height); y++) {
+            const [start, end] = lines[y];
+            this.renderLine(context, y, start, end);
+        }
+    }
+
+    private renderLine(context: RenderContext, y: number, start: number, end: number, displayLine?: DisplayLine): void {
         const resolved = this.resolvedStyle;
         context.drawText(
             0,
-            0,
-            this.text,
+            y,
+            this.text.slice(start, end),
             { fg: resolved.fg, bg: resolved.bg, style: StyleFlags.None },
             {
-                maxWidth: width,
-                displayLine: this.displayLine,
+                maxWidth: this.layoutSize.width,
+                displayLine,
                 getStyle: (offset) => {
-                    const charStyle = this.charStyles.get(offset);
+                    const charStyle = this.charStyles.get(start + offset);
                     if (charStyle === undefined) return undefined;
                     // Ключи — только для заданных полей: drawText мёржит
                     // спредом, и ключ с undefined затёр бы базовый цвет.

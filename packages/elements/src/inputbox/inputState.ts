@@ -264,6 +264,13 @@ export class InputState {
         this.moveCursorRightRaw();
     }
 
+    /** Move cursor to `offset` (clamped to the text), dropping the selection. */
+    public moveCursorTo(offset: number): void {
+        this.anchorOffset = null;
+        this.cursorOffsetValue = Math.max(0, Math.min(this.textValue.length, offset));
+        this.lastEditKind = null;
+    }
+
     /** Move cursor to the beginning of the line (Home). */
     public moveCursorToStart(): void {
         this.anchorOffset = null;
