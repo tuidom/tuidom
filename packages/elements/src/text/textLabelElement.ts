@@ -14,7 +14,8 @@ export interface StyledChar {
 export class TextLabelElement extends TUIElement {
     /**
      * Перенос по ширине: текст, не влезший в строку, продолжается на следующей
-     * (по графемам, как терминал), а высота лейбла — число получившихся строк.
+     * (по графемам, как терминал), `\n` начинает новую строку (`white-space:
+     * pre-wrap`), а высота лейбла — число получившихся строк.
      * Выключен — одна строка, хвост срезается справа.
      */
     public wrap = false;
@@ -99,6 +100,13 @@ export class TextLabelElement extends TUIElement {
         let start = 0;
         let used = 0;
         for (const slot of this.displayLine.slots) {
+            // Перевод строки — конец строки переноса; сам он не рисуется.
+            if (this.text.charCodeAt(slot.offset) === 10) {
+                lines.push([start, slot.offset]);
+                start = slot.offset + 1;
+                used = 0;
+                continue;
+            }
             if (used > 0 && used + slot.displayWidth > width) {
                 lines.push([start, slot.offset]);
                 start = slot.offset;

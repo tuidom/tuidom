@@ -768,18 +768,13 @@ export class ListViewElement extends ScrollableElement {
         if (rows.length === 0 || line < 0 || line >= this.contentLines) return null;
         const index = this.slotIndexAtLine(line);
         if (line >= this.rowTops[index] + rows[index].height) return null; // разделитель
-        // Строка, срезанная низом вьюпорта, не разложена и не нарисована (см. windowIndices).
-        // Высота — последнего layout, а не layoutSize: геттер раскладывал бы список
-        // посреди клика и делал бы доверенным окно, которого на экране ещё нет.
-        const bottom = this.scrollTop + this.lastLayoutViewportHeight;
-        const cut = this.rowTops[index] < bottom && this.rowTops[index] + rows[index].height > bottom;
-        return cut && this.rowTops[index] !== this.scrollTop ? null : index;
+        // Строка, срезанная низом вьюпорта, нарисована своими первыми строками (см. windowIndices).
+        return index;
     }
 
     /**
      * Индексы строк [start, end), видимых в окне линий [scrollTop, scrollTop + height):
-     * только целиком влезающие — строка, не влезшая снизу, не раскладывается
-     * (на её месте фон). Исключение — строка выше вьюпорта: она одна в окне и режется.
+     * строка, не влезшая снизу, и строка выше вьюпорта режутся по нему.
      */
     private windowIndices(scrollTop: number, height: number): [number, number] {
         const rows = this.ensureProjection();
@@ -787,8 +782,10 @@ export class ListViewElement extends ScrollableElement {
         const start = this.slotIndexAtLine(Math.max(0, scrollTop));
         let end = start;
         const bottom = scrollTop + height;
-        while (end < rows.length && this.rowTops[end] + rows[end].height <= bottom) end++;
-        return [start, end === start ? start + 1 : end];
+        // Строка, начавшаяся до низа вьюпорта, в окне, даже если влезла не целиком: performLayout режет её по
+        // вьюпорту (видны первые её строки, как у списка эталона), а не оставляет пустые строки под предыдущей.
+        while (end < rows.length && this.rowTops[end] < bottom) end++;
+        return [start, end];
     }
 
     /** Наибольшее смещение: верх первой строки, с которой хвост списка влезает целиком. */

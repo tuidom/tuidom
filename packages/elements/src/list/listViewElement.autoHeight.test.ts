@@ -63,6 +63,20 @@ describe("ListViewElement rows of auto height", () => {
         expect(lines(app, 4, 5)).toEqual(["ccccc", "cccc", "ddddd", "dddd"]);
     });
 
+    it("rows that grow taller at a narrower width make room for the scrollbar they bring, in the same frame", () => {
+        const list = new ListViewElement();
+        for (const id of ["a", "b", "c"]) list.appendRow(wrapping(id, id.repeat(12)), { height: "auto" });
+        const app = TestApp.createWithContent(new ScrollBarDecorator(list), new Size(20, 4));
+        expect(lines(app, 3, 20)).toEqual(["aaaaaaaaaaaa", "bbbbbbbbbbbb", "cccccccccccc"]);
+
+        app.backend.resize(new Size(6, 4));
+        app.render();
+
+        // Five columns for the text, the sixth is the scrollbar's.
+        expect(list.layoutSize.width).toBe(5);
+        expect(lines(app, 3, 5)).toEqual(["aaaaa", "aaaaa", "aa"]);
+    });
+
     it("measures a row appended after the layout at the known width", () => {
         const list = new ListViewElement();
         list.appendRow(wrapping("a", "a"), { height: "auto" });

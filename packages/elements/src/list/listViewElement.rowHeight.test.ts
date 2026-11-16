@@ -191,13 +191,15 @@ describe("ListViewElement rows taller than one line", () => {
         expect(lineText(app, 0)).toBe("r1:1");
     });
 
-    it("leaves a row that does not fit at the bottom out of the frame", () => {
+    it("shows the first lines of a row that does not fit at the bottom, as upstream's list; a click there picks it", () => {
         const { list, app } = makeList(3, { size: new Size(20, 4) });
 
-        expect([0, 1, 2].map((y) => lineText(app, y))).toEqual(["r0:1", "r0:2", "r0:3"]);
-        expect(lineText(app, 3)).toBe("    ");
+        expect([0, 1, 2, 3].map((y) => lineText(app, y))).toEqual(["r0:1", "r0:2", "r0:3", "r1:1"]);
         mouse(list, "click", 3);
-        expect(list.getCursorElement()?.id).toBe("r0");
+        expect(list.getCursorElement()?.id).toBe("r1");
+        // The row the cursor reached is scrolled whole into view.
+        app.render();
+        expect(list.scrollTop).toBe(3);
     });
 
     it("the wheel scrolls by at least one row", () => {

@@ -18,6 +18,17 @@ describe("TextLabelElement wrap", () => {
         expect(label.getMinIntrinsicHeight(8)).toBe(1);
     });
 
+    it("breaks the line at a line break, which takes no cell; a click finds the graphemes after it", () => {
+        const label = wrapped("ab\ncdefg\n\nh");
+        expect(label.getMinIntrinsicHeight(4)).toBe(5);
+        renderElement(label, 4, 5, { resolveStyles: true });
+        expect(label.offsetAt(0, 1)).toBe(3);
+        expect(label.offsetAt(0, 2)).toBe(7);
+        expect(label.offsetAt(2, 0)).toBeUndefined();
+        expect(label.offsetAt(0, 3)).toBeUndefined();
+        expect(label.offsetAt(0, 4)).toBe(10);
+    });
+
     it("is one line when empty or without wrap", () => {
         expect(wrapped("").getMinIntrinsicHeight(3)).toBe(1);
         expect(new TextLabelElement("abcdefgh").getMinIntrinsicHeight(3)).toBe(1);
