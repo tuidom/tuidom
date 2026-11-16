@@ -54,3 +54,25 @@ describe("TextLabelElement wrap", () => {
         expect(backend.getTextAt(new Point(0, 0), 6)).toBe("abcdef");
     });
 });
+
+describe("TextLabelElement offsetAt", () => {
+    it("finds the grapheme under a cell of a wrapped line", () => {
+        const label = wrapped("abcdef");
+        renderElement(label, 4, 2, { resolveStyles: true });
+        expect(label.offsetAt(0, 0)).toBe(0);
+        expect(label.offsetAt(1, 1)).toBe(5);
+        expect(label.offsetAt(2, 1)).toBeUndefined();
+        expect(label.offsetAt(0, 2)).toBeUndefined();
+        expect(label.offsetAt(-1, 0)).toBeUndefined();
+        expect(label.offsetAt(0, -1)).toBeUndefined();
+    });
+
+    it("counts both cells of a wide grapheme and works without wrap", () => {
+        const label = new TextLabelElement("a中b");
+        renderElement(label, 6, 1, { resolveStyles: true });
+        expect(label.offsetAt(1, 0)).toBe(1);
+        expect(label.offsetAt(2, 0)).toBe(1);
+        expect(label.offsetAt(3, 0)).toBe(2);
+        expect(label.offsetAt(0, 1)).toBeUndefined();
+    });
+});

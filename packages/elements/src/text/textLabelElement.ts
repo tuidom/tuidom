@@ -111,6 +111,24 @@ export class TextLabelElement extends TUIElement {
         return lines;
     }
 
+    /**
+     * Смещение (code units) графемы в ячейке `(x, y)` лейбла после последнего
+     * layout — по нему владелец находит кусок текста под кликом (ссылку).
+     * `undefined` — в ячейке нет текста (за концом строки или ниже строк).
+     */
+    public offsetAt(x: number, y: number): number | undefined {
+        const lines = this.wrap ? this.wrappedLines(this.layoutSize.width) : [[0, this.text.length] as const];
+        const line = lines.at(y);
+        if (y < 0 || line === undefined || x < 0) return undefined;
+        let column = 0;
+        for (const slot of this.displayLine.slots) {
+            if (slot.offset < line[0] || slot.offset >= line[1]) continue;
+            if (x < column + slot.displayWidth) return slot.offset;
+            column += slot.displayWidth;
+        }
+        return undefined;
+    }
+
     public override render(context: RenderContext): void {
         if (!this.wrap) {
             this.renderLine(context, 0, 0, this.text.length, this.displayLine);
