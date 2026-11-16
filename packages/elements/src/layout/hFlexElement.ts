@@ -20,6 +20,16 @@ export function hflexFill(): HFlexChildSize {
     return { type: "fill" };
 }
 
+/**
+ * A function of the module, not a static of the class: a class that names itself in its body is emitted by esbuild as
+ * `_HFlexElement`, and the constructor's name is what the inspector and the tests select by.
+ */
+function fixedOrFitWidth(child: TUIElement): number {
+    const style = child.layoutStyle as HFlexLayoutStyle;
+    if (style.width.type === "fixed") return style.width.value;
+    return child.getMaxIntrinsicWidth(style.height === "fill" ? 1 : style.height);
+}
+
 export class HFlexElement extends TUIElement {
     public addChild(child: TUIElement, style: HFlexLayoutStyle): void {
         if (style.width.type === "fill") {
@@ -105,18 +115,12 @@ export class HFlexElement extends TUIElement {
      */
     private childWidthWithin(child: TUIElement, width: number): number {
         const childStyle = child.layoutStyle as HFlexLayoutStyle;
-        if (childStyle.width.type !== "fill") return HFlexElement.fixedOrFitWidth(child);
+        if (childStyle.width.type !== "fill") return fixedOrFitWidth(child);
         let taken = 0;
         for (const sibling of this.getChildren()) {
-            if (sibling !== child) taken += HFlexElement.fixedOrFitWidth(sibling);
+            if (sibling !== child) taken += fixedOrFitWidth(sibling);
         }
         return Math.max(0, width - taken);
-    }
-
-    private static fixedOrFitWidth(child: TUIElement): number {
-        const style = child.layoutStyle as HFlexLayoutStyle;
-        if (style.width.type === "fixed") return style.width.value;
-        return child.getMaxIntrinsicWidth(style.height === "fill" ? 1 : style.height);
     }
 
     // ─── Layout ───
