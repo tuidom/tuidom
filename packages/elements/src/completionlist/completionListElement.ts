@@ -1,5 +1,6 @@
 import { DisplayLine } from "@tuidom/core/common/displayLine";
 import { BoxConstraints, Size } from "@tuidom/core/common/geometryPromitives";
+import { StyleFlags } from "@tuidom/core/common/styleFlags";
 import { truncateEnd } from "@tuidom/core/common/textTruncation";
 import { BORDER_THICKNESS } from "@tuidom/core/dom/borderStyle";
 import type { TUIMouseEvent } from "@tuidom/core/dom/events/tuiMouseEvent";
@@ -44,6 +45,14 @@ export interface CompletionListItem {
     readonly filterText?: string;
     /** Ключ сортировки источника (у LSP — `sortText`); при равенстве порядок исходный. */
     readonly sortText?: string;
+    /** Устаревший пункт (`CompletionItemTag.Deprecated`): лейбл зачёркнут, как в suggest widget VS Code. */
+    readonly deprecated?: boolean;
+    /**
+     * Пункт просит выбор при открытии и после каждой пере-фильтрации — как `preselect`
+     * в VS Code (`suggestMemory.ts` `Memory.select`): берётся первый такой пункт в группе
+     * лучшего ранга совпадения, ниже неё выбор не тянется.
+     */
+    readonly preselect?: boolean;
     readonly data?: unknown;
 }
 
@@ -152,8 +161,9 @@ export class CompletionListElement extends TUIElement {
             return aKey < bKey ? -1 : aKey > bKey ? 1 : 0;
         });
         this.contentWidthCache = null;
-        this.selectedIndexValue = 0;
+        this.selectedIndexValue = preselectIndex(this.filteredItems, needle);
         this.scrollOffset = 0;
+        this.ensureVisible(this.selectedIndexValue);
         this.markDirty();
         this.fireSelectionChanged();
     }
@@ -285,7 +295,14 @@ export class CompletionListElement extends TUIElement {
         const labelAvail = Math.max(0, contentRight - rightWidth - LABEL_X);
         const labelNatural = new DisplayLine(item.label).displayWidth;
         const labelText = labelNatural <= labelAvail ? item.label : truncateEnd(item.label, labelAvail);
-        context.drawText(LABEL_X, rowY, labelText, { fg: rowFg, bg: rowBg }, { maxWidth: labelAvail });
+        context.drawText(
+            LABEL_X,
+            rowY,
+            labelText,
+            { fg: rowFg, bg: rowBg, style: item.deprecated === true ? StyleFlags.Strikethrough : StyleFlags.None },
+            // Не шире текста: добивка пробелами за лейблом понесла бы зачёркивание.
+            { maxWidth: Math.min(labelNatural, labelAvail) },
+        );
 
         // Сигнатура вплотную за лейблом (labelDetails.detail у LSP) — приглушённо
         // и только если влезает целиком: обрезанная сигнатура вводит в заблуждение.
@@ -383,6 +400,19 @@ export class CompletionListElement extends TUIElement {
  */
 function matchText(item: CompletionListItem): string {
     return item.filterText ?? item.label;
+}
+
+/**
+ * Индекс первого `preselect`-пункта в группе лучшего ранга (список уже отсортирован,
+ * лучший ранг — у первого пункта), иначе 0.
+ */
+function preselectIndex(items: readonly CompletionListItem[], needle: string): number {
+    const topRank = items.length > 0 ? matchRank(items[0], needle) : 0;
+    for (let i = 0; i < items.length; i++) {
+        if (matchRank(items[i], needle) !== topRank) break;
+        if (items[i].preselect === true) return i;
+    }
+    return 0;
 }
 
 /** 0 — совпадение с начала, 1 — где-то внутри (при пустом фильтре все равны). */
