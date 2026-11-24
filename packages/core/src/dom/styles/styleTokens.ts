@@ -64,6 +64,8 @@ export const STYLE_TOKEN_DEFAULTS = {
     "tab.inactiveForeground": packRgb(150, 150, 150),
     "tab.inactiveBackground": packRgb(45, 45, 45),
     "editorGroupHeader.tabsBackground": packRgb(37, 37, 38),
+    // Lines of the tab boxes and their baseline (the editor frame's top line).
+    "tab.border": packRgb(43, 43, 43),
 
     // ── Панель с заголовком ──
     // Дефолтов `panel.*` здесь больше нет: виджет нижней панели уехал в Diode

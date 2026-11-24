@@ -40,6 +40,7 @@ export class EditorPartElement extends TUIElement {
     private orientationValue: EditorPartOrientation = "columns";
     private maximizedIndexValue: number | null = null;
     private separatorColorVarValue: string | null = null;
+    private framedGroupsValue = false;
     /** Основные размеры групп из последнего layout — база для drag-математики. */
     private lastSizes: number[] = [];
 
@@ -73,6 +74,24 @@ export class EditorPartElement extends TUIElement {
         if (this.separatorColorVarValue === value) return;
         this.separatorColorVarValue = value;
         for (const sash of this.sashes) sash.restColorVar = value;
+        this.markDirty();
+    }
+
+    /**
+     * Группы в собственных рамках: соседние группы стоят вплотную, а граница —
+     * это две линии рамок (последняя колонка/строка одной группы и первая
+     * следующей). Саш лежит на обеих, тянуть можно за любую, линия подсветки
+     * не рисуется — границу и так видно. Разделитель
+     * ({@link separatorColorVar}) при этом не ставится: место заняли рамки.
+     */
+    public get framedGroups(): boolean {
+        return this.framedGroupsValue;
+    }
+
+    public set framedGroups(value: boolean) {
+        if (this.framedGroupsValue === value) return;
+        this.framedGroupsValue = value;
+        this.rebuildSashes();
         this.markDirty();
     }
 
@@ -170,7 +189,7 @@ export class EditorPartElement extends TUIElement {
 
     /** Клеток основного размера на одну границу: 1 с видимым разделителем, иначе 0. */
     private separatorSize(): number {
-        return this.separatorColorVarValue === null ? 0 : 1;
+        return this.separatorColorVarValue === null || this.framedGroupsValue ? 0 : 1;
     }
 
     private minMainSize(): number {
@@ -199,6 +218,11 @@ export class EditorPartElement extends TUIElement {
         this.sashes = this.views.slice(1).map((_, i) => {
             const sash = new SashElement(sashOrientation);
             sash.restColorVar = this.separatorColorVarValue;
+            if (this.framedGroupsValue) {
+                // Две клетки — линии обеих рамок; саш сообщает вторую: начало следующей группы.
+                sash.anchor = 1;
+                sash.hoverColorVar = null;
+            }
             sash.onDrag = (boundaryScreen) => {
                 this.handleSashDrag(i, boundaryScreen);
             };
@@ -237,7 +261,7 @@ export class EditorPartElement extends TUIElement {
         // (не на первой нижней) — курсор на строке Y означает размер верхней
         // Y+1. С разделителем саш — своя клетка сразу за группой: курсор на X
         // ставит разделитель на X.
-        const inset = gap === 0 && this.orientationValue === "rows" ? 1 : 0;
+        const inset = gap === 0 && this.orientationValue === "rows" && !this.framedGroupsValue ? 1 : 0;
         const target = Math.max(min, Math.min(boundaryScreen - origin - offset + inset, pair - min));
         sizes[index] = target;
         sizes[index + 1] = pair - target;
@@ -327,8 +351,11 @@ export class EditorPartElement extends TUIElement {
             // это её табы). Явная укладка каждый layout: ленивый layoutSize со
             // старым боксом ломает hit-test (контракт SashElement, docs/LAYOUT.md).
             if (i < this.sashes.length) {
-                const sashSize = columns ? new Size(1, containerSize.height) : new Size(containerSize.width, 1);
-                const sashMain = gap > 0 || columns ? offset : Math.max(0, offset - 1);
+                const thickness = this.framedGroupsValue ? 2 : 1;
+                const sashSize = columns
+                    ? new Size(thickness, containerSize.height)
+                    : new Size(containerSize.width, thickness);
+                const sashMain = this.framedGroupsValue || (gap === 0 && !columns) ? Math.max(0, offset - 1) : offset;
                 offset += gap;
                 this.layoutChild(
                     this.sashes[i],

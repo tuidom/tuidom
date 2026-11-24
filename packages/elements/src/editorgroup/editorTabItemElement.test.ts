@@ -5,7 +5,7 @@ import type { MockTerminalBackend } from "@tuidom/testing/mockTerminalBackend";
 import { renderElement } from "@tuidom/testing/renderElement";
 import { describe, expect, it, vi } from "vitest";
 
-import { EditorTabItemElement } from "./editorTabItemElement.ts";
+import { EditorTabItemElement, TAB_HEIGHT } from "./editorTabItemElement.ts";
 
 const LOCK_CHAR = "\uea75"; // nf-cod-lock, см. editorTabItemElement.ts
 // Тестовая фикстура иконок: виджету всё равно, откуда глиф и цвет — реестр
@@ -13,10 +13,11 @@ const LOCK_CHAR = "\uea75"; // nf-cod-lock, см. editorTabItemElement.ts
 const tsIcon = { icon: "\uE628", color: packRgb(49, 120, 198) };
 const jsIcon = { icon: "\uE781", color: packRgb(241, 224, 90) };
 
+/** Renders the tab box; `text` is its label row between the two side lines. */
 function renderTab(tab: EditorTabItemElement, width?: number): { backend: MockTerminalBackend; text: string } {
     const intrinsicWidth = width ?? tab.getMaxIntrinsicWidth(1);
-    const backend = renderElement(tab, intrinsicWidth, 1);
-    const text = backend.getTextAt(new Point(0, 0), intrinsicWidth);
+    const backend = renderElement(tab, intrinsicWidth, TAB_HEIGHT);
+    const text = backend.getTextAt(new Point(1, 1), Math.max(0, intrinsicWidth - 2));
     return { backend, text };
 }
 
@@ -24,8 +25,8 @@ describe("EditorTabItemElement", () => {
     describe("intrinsic size", () => {
         it("calculates width with icon, label, and close button", () => {
             const tab = new EditorTabItemElement("file.ts", tsIcon.icon, tsIcon.color);
-            // [1 pad][icon][space][file.ts][ ×][1 pad] = 1 + 1 + 1 + 7 + 2 + 1 = 13
-            expect(tab.getMaxIntrinsicWidth(1)).toBe(13);
+            // [│][1 pad][icon][space][file.ts][ ×][1 pad][│] = 1 + 1 + 1 + 1 + 7 + 2 + 1 + 1 = 15
+            expect(tab.getMaxIntrinsicWidth(1)).toBe(15);
         });
 
         it("calculates width with modified indicator (shared trailing slot)", () => {
@@ -34,14 +35,14 @@ describe("EditorTabItemElement", () => {
             });
             // The dot replaces the cross in a single trailing slot, so the width
             // matches an unmodified tab:
-            // [1 pad][icon][space][file.ts][ ●][1 pad] = 1 + 1 + 1 + 7 + 2 + 1 = 13
-            expect(tab.getMaxIntrinsicWidth(1)).toBe(13);
+            // [│][1 pad][icon][space][file.ts][ ●][1 pad][│] = 15
+            expect(tab.getMaxIntrinsicWidth(1)).toBe(15);
         });
 
         it("calculates width without icon", () => {
             const tab = new EditorTabItemElement("file.ts", "", packRgb(180, 180, 180));
-            // [1 pad][file.ts][ ×][1 pad] = 1 + 7 + 2 + 1 = 11
-            expect(tab.getMaxIntrinsicWidth(1)).toBe(11);
+            // [│][1 pad][file.ts][ ×][1 pad][│] = 1 + 1 + 7 + 2 + 1 + 1 = 13
+            expect(tab.getMaxIntrinsicWidth(1)).toBe(13);
         });
 
         it("calculates width with custom padding", () => {
@@ -49,8 +50,8 @@ describe("EditorTabItemElement", () => {
                 paddingLeft: 2,
                 paddingRight: 3,
             });
-            // [2 pad][icon][space][a.ts][ ×][3 pad] = 2 + 1 + 1 + 4 + 2 + 3 = 13
-            expect(tab.getMaxIntrinsicWidth(1)).toBe(13);
+            // [│][2 pad][icon][space][a.ts][ ×][3 pad][│] = 1 + 2 + 1 + 1 + 4 + 2 + 3 + 1 = 15
+            expect(tab.getMaxIntrinsicWidth(1)).toBe(15);
         });
 
         it("calculates width with padding=2 on each side", () => {
@@ -58,15 +59,15 @@ describe("EditorTabItemElement", () => {
                 paddingLeft: 2,
                 paddingRight: 2,
             });
-            // [2 pad][icon][space][file.ts][ ×][2 pad] = 2 + 1 + 1 + 7 + 2 + 2 = 15
-            expect(tab.getMinIntrinsicWidth(1)).toBe(15);
-            expect(tab.getMaxIntrinsicWidth(1)).toBe(15);
+            // [│][2 pad][icon][space][file.ts][ ×][2 pad][│] = 1 + 2 + 1 + 1 + 7 + 2 + 2 + 1 = 17
+            expect(tab.getMinIntrinsicWidth(1)).toBe(17);
+            expect(tab.getMaxIntrinsicWidth(1)).toBe(17);
         });
 
-        it("height is always 1", () => {
+        it("is three rows tall: top line, label row, baseline", () => {
             const tab = new EditorTabItemElement("file.ts", tsIcon.icon, tsIcon.color);
-            expect(tab.getMinIntrinsicHeight(100)).toBe(1);
-            expect(tab.getMaxIntrinsicHeight(100)).toBe(1);
+            expect(tab.getMinIntrinsicHeight(100)).toBe(3);
+            expect(tab.getMaxIntrinsicHeight(100)).toBe(3);
         });
     });
 
@@ -211,7 +212,7 @@ describe("EditorTabItemElement", () => {
             // Узкая вкладка: пробел после замка уже не влезает — рисуем что успели,
             // а не выходим за границы.
             const tab = new EditorTabItemElement("file.ts", tsIcon.icon, tsIcon.color, { readOnly: true });
-            const { text } = renderTab(tab, 4);
+            const { text } = renderTab(tab, 6);
             expect(text).toContain(LOCK_CHAR);
             expect(text).not.toContain("file.ts");
         });
@@ -289,8 +290,8 @@ describe("EditorTabItemElement", () => {
             tab.localPosition = new Offset(0, 0);
             tab.layout(BoxConstraints.tight(new Size(w, 1)));
 
-            // Close button is at position: width - paddingRight - 1
-            const closeX = w - 1 - 1; // paddingRight=1, close char len=1
+            // Close button is at position: width - side - paddingRight - 1
+            const closeX = w - 1 - 1 - 1; // side line, paddingRight=1, close char len=1
             const event = new TUIMouseEvent("click", {
                 button: "left",
                 screenX: closeX,
@@ -338,7 +339,7 @@ describe("EditorTabItemElement", () => {
             tab.localPosition = new Offset(0, 0);
             tab.layout(BoxConstraints.tight(new Size(w, 1)));
 
-            const closeX = w - 1 - 1; // paddingRight=1, close char len=1
+            const closeX = w - 1 - 1 - 1; // side line, paddingRight=1, close char len=1
             const event = new TUIMouseEvent("click", {
                 button: "middle",
                 screenX: closeX,
@@ -384,7 +385,7 @@ describe("EditorTabItemElement", () => {
             tab.localPosition = new Offset(0, 0);
             tab.layout(BoxConstraints.tight(new Size(w, 1)));
 
-            const closeX = w - 1 - 1; // paddingRight=1, close char len=1
+            const closeX = w - 1 - 1 - 1; // side line, paddingRight=1, close char len=1
             const event = new TUIMouseEvent("click", {
                 button: "right",
                 screenX: closeX,
@@ -443,10 +444,10 @@ describe("EditorTabItemElement", () => {
 
     describe("rendering under tight width", () => {
         it("omits the space after the icon when the icon fills the last column", () => {
-            // paddingLeft=0, single-cell icon, width=1: the icon lands at the last
-            // column, so the trailing-space branch (x < width) is skipped.
+            // paddingLeft=0, single-cell icon, one column between the side lines: the
+            // icon lands at the last inner column, nothing else fits.
             const tab = new EditorTabItemElement("file.ts", "I", packRgb(1, 2, 3), { paddingLeft: 0 });
-            const { text } = renderTab(tab, 1);
+            const { text } = renderTab(tab, 3);
             expect(text).toBe("I");
         });
 
@@ -454,7 +455,7 @@ describe("EditorTabItemElement", () => {
             // Width fits the icon + a label char but leaves no room for " ×"
             // (x + 1 < width is false), so the close button is not drawn.
             const tab = new EditorTabItemElement("AB", "", packRgb(1, 2, 3), { paddingLeft: 0 });
-            const { text } = renderTab(tab, 2);
+            const { text } = renderTab(tab, 4);
             expect(text).toBe("AB");
             expect(text).not.toContain("×");
         });

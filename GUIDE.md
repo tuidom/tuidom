@@ -165,7 +165,7 @@ A child can also mark rows on the vertical bar (an overview ruler, as in VS
 Code): implement `getScrollBarMarkers()` from `IScrollable` and return
 `{ start, end, color, priority }` spans in content rows. The decorator's
 `markerPlacement` decides where they go: `"inside"` (default) draws them over
-the bar, the thumb then moving in whole cells; `"outside"` gives them a column
+the bar; `"outside"` gives them a column
 of their own left of an untouched bar; `"auto"` picks outside from
 `markerColumnMinWidth` (80) columns up; `"none"` ignores them. A cell holding
 several marks shows the highest priority's colour and a density glyph
@@ -199,6 +199,30 @@ A sash is invisible at rest unless `restColorVar` names a style token: then
 it always draws its line in that color and switches to `sash.hoverBorder` on
 hover and drag. `EditorPartElement.separatorColorVar` turns this on between
 editor groups and gives each boundary a column (or row) of its own.
+`hoverColorVar` (default `sash.hoverBorder`, `null` for none) is the line on
+hover and drag. A sash may be several cells thick — say, over two frame lines
+that meet at a boundary; it then follows the cell the user grabbed and reports
+the boundary of its `anchor` cell, so the drag never jumps.
+`EditorPartElement.framedGroups` lays groups in frames of their own side by
+side: no separator cell, a two-cell sash over both frame lines, no hover line.
+
+### Editor tabs
+
+`EditorTabStripElement` draws tabs as boxes three rows tall standing on a
+baseline: the active tab opens into the editor below, the others stand on the
+line. The baseline is meant to be the top line of the editor's frame: the
+strip's first column is the frame's left side (the first tab's side goes on
+into it) and, unless `endCorner` is off, its last column is the corner `╮`.
+Lines are `tab.border`; tabs and the baseline lie on `tab.activeBackground`;
+beside the tabs, above the line, the strip shows
+`editorGroupHeader.tabsBackground`.
+
+### Repaint from layout
+
+An element whose look follows its children's layout (a frame drawing joints
+where a child's separators fall) can ask for a repaint from `performLayout`
+with `markPaintDirtyDuringLayout()`: the damage pass of the same frame picks
+it up. `markDirty()` there would leave the tree dirty after the frame.
 
 ## Styling and themes
 

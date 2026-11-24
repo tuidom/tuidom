@@ -5,6 +5,7 @@ import type { MockTerminalBackend } from "@tuidom/testing/mockTerminalBackend";
 import { renderElement } from "@tuidom/testing/renderElement";
 import { describe, expect, it, vi } from "vitest";
 
+import { TAB_HEIGHT } from "./editorTabItemElement.ts";
 import type { TabInfo } from "./editorTabStripElement.ts";
 import { EditorTabStripElement } from "./editorTabStripElement.ts";
 
@@ -20,10 +21,14 @@ function makeTabs(...names: string[]): TabInfo[] {
     });
 }
 
-function renderStrip(strip: EditorTabStripElement, width: number): { backend: MockTerminalBackend; text: string } {
-    const backend = renderElement(strip, width, 1);
-    const text = backend.getTextAt(new Point(0, 0), width);
-    return { backend, text };
+/** `text` is the label row (between the tabs' top lines and the baseline); `rows` — all three. */
+function renderStrip(
+    strip: EditorTabStripElement,
+    width: number,
+): { backend: MockTerminalBackend; text: string; rows: string[] } {
+    const backend = renderElement(strip, width, TAB_HEIGHT);
+    const rows = [0, 1, 2].map((y) => backend.getTextAt(new Point(0, y), width));
+    return { backend, text: rows[1], rows };
 }
 
 describe("EditorTabStripElement", () => {
@@ -70,8 +75,10 @@ describe("EditorTabStripElement", () => {
             const items = strip.getItemElements();
             expect(items[0].hasStyleState("active")).toBe(true);
             expect(items[1].hasStyleState("active")).toBe(false);
-            expect(items[0].style.bg).toBe("tab.inactiveBackground");
-            expect(items[0].style.when?.[0].bg).toBe("tab.activeBackground");
+            // Every tab is cut from the editor's surface; activity shows in the label colour.
+            expect(items[0].style.bg).toBe("tab.activeBackground");
+            expect(items[0].style.fg).toBe("tab.inactiveForeground");
+            expect(items[0].style.when?.[0].fg).toBe("tab.activeForeground");
         });
 
         it("смена activeIndex переносит состояние active", () => {
@@ -98,13 +105,13 @@ describe("EditorTabStripElement", () => {
             strip.setTabs(tabs);
             strip.activeIndex = 0;
 
-            const backend = renderElement(strip, 60, 1, { themeVars: true });
+            const backend = renderElement(strip, 60, TAB_HEIGHT, { themeVars: true });
             const items = strip.getItemElements();
-            // Колонка имени: [2 pad][icon][space] → имя с 4-й колонки вкладки.
+            // Колонка имени: [│][1 pad][icon][space] → имя с 4-й колонки вкладки, в строке метки.
             const labelX = (i: number): number => items[i].globalPosition.x + 4;
-            expect(backend.getFgAt(new Point(labelX(0), 0))).toBe(ERROR_FG);
-            expect(backend.getFgAt(new Point(labelX(1), 0))).toBe(ERROR_FG);
-            expect(backend.getFgAt(new Point(labelX(2), 0))).toBe(DARK_PLUS_STYLE_VARS["tab.inactiveForeground"]);
+            expect(backend.getFgAt(new Point(labelX(0), 1))).toBe(ERROR_FG);
+            expect(backend.getFgAt(new Point(labelX(1), 1))).toBe(ERROR_FG);
+            expect(backend.getFgAt(new Point(labelX(2), 1))).toBe(DARK_PLUS_STYLE_VARS["tab.inactiveForeground"]);
         });
 
         it("флаг доезжает до переиспользованной вкладки и снимается", () => {
@@ -213,30 +220,30 @@ describe("EditorTabStripElement", () => {
             expect(items[0].getModified()).toBe(true);
         });
 
-        it("tabs created with paddingLeft=2 and paddingRight=2", () => {
+        it("tabs created with one cell of padding inside the side lines", () => {
             const strip = new EditorTabStripElement();
             strip.setTabs(makeTabs("file.ts"));
 
             const items = strip.getItemElements();
-            expect(items[0].getPaddingLeft()).toBe(2);
-            expect(items[0].getPaddingRight()).toBe(2);
+            expect(items[0].getPaddingLeft()).toBe(1);
+            expect(items[0].getPaddingRight()).toBe(1);
         });
 
-        it("tab getMinIntrinsicWidth reflects padding=2", () => {
+        it("tab getMinIntrinsicWidth counts the side lines and the padding", () => {
             const strip = new EditorTabStripElement();
             strip.setTabs(makeTabs("file.ts"));
 
             const items = strip.getItemElements();
-            // [2 pad][icon][space][file.ts][ ×][2 pad] = 2 + 1 + 1 + 7 + 2 + 2 = 15
+            // [│][1 pad][icon][space][file.ts][ ×][1 pad][│] = 1 + 1 + 1 + 1 + 7 + 2 + 1 + 1 = 15
             expect(items[0].getMinIntrinsicWidth(1)).toBe(15);
         });
     });
 
     describe("intrinsic size", () => {
-        it("height is always 1", () => {
+        it("is three rows tall, like a tab", () => {
             const strip = new EditorTabStripElement();
-            expect(strip.getMinIntrinsicHeight(100)).toBe(1);
-            expect(strip.getMaxIntrinsicHeight(100)).toBe(1);
+            expect(strip.getMinIntrinsicHeight(100)).toBe(3);
+            expect(strip.getMaxIntrinsicHeight(100)).toBe(3);
         });
 
         it("width delegates to the inner hflex (filler contributes zero width)", () => {
