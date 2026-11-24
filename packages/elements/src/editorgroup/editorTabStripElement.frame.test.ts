@@ -1,4 +1,4 @@
-import { Point } from "@tuidom/core/common/geometryPromitives";
+import { BoxConstraints, Point, Size } from "@tuidom/core/common/geometryPromitives";
 import { DARK_PLUS_STYLE_VARS } from "@tuidom/testing/darkPlusStyleVars";
 import { renderElement } from "@tuidom/testing/renderElement";
 import { describe, expect, it } from "vitest";
@@ -76,5 +76,39 @@ describe("EditorTabStripElement as the editor frame's top", () => {
         expect(backend.getBgAt(new Point(1, 1))).toBe(DARK_PLUS_STYLE_VARS["tab.activeBackground"]);
         // Above the baseline, beside the tabs: the workbench surface.
         expect(backend.getBgAt(new Point(12, 0))).toBe(DARK_PLUS_STYLE_VARS["editorGroupHeader.tabsBackground"]);
+    });
+
+    it("marks only the first tab as standing on the frame's edge, and reports endCorner", () => {
+        const strip = new EditorTabStripElement();
+        strip.setTabs(tabs("a.ts", "b.ts"));
+
+        expect(strip.getItemElements().map((item) => item.getLeadingEdge())).toEqual([true, false]);
+        expect(strip.endCorner).toBe(true);
+        strip.endCorner = false;
+        expect(strip.endCorner).toBe(false);
+    });
+
+    it("does not repaint when endCorner or the leading edge is set to what it already is", () => {
+        const strip = new EditorTabStripElement();
+        strip.setTabs(tabs("a.ts"));
+        strip.layout(BoxConstraints.tight(new Size(20, TAB_HEIGHT)));
+        const [item] = strip.getItemElements();
+        item.layout(BoxConstraints.tight(new Size(10, TAB_HEIGHT)));
+
+        strip.endCorner = true;
+        item.setLeadingEdge(true);
+
+        expect(strip.isLayoutDirty).toBe(false);
+        expect(item.isLayoutDirty).toBe(false);
+    });
+
+    it("draws nothing but the background in a tab narrower than its two sides", () => {
+        const strip = new EditorTabStripElement();
+        strip.setTabs(tabs("a.ts"));
+        const [item] = strip.getItemElements();
+
+        const backend = renderElement(item, 1, TAB_HEIGHT);
+
+        expect([0, 1, 2].map((y) => backend.getTextAt(new Point(0, y), 1))).toEqual([" ", " ", " "]);
     });
 });

@@ -81,4 +81,17 @@ describe("EditorPartElement.framedGroups", () => {
         part.layout(BoxConstraints.tight(new Size(100, 30)));
         expect(a.layoutSize.height).toBe(20);
     });
+
+    it("reports the mode and keeps the sashes when it is set to what it already is", () => {
+        const { part } = framedPart("columns");
+        const sash = sashOf(part);
+
+        expect(part.framedGroups).toBe(true);
+        part.framedGroups = true;
+        expect(sashOf(part)).toBe(sash);
+
+        part.framedGroups = false;
+        expect(part.framedGroups).toBe(false);
+        expect(sashOf(part).hoverColorVar).toBe("sash.hoverBorder");
+    });
 });
