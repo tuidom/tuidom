@@ -31,9 +31,23 @@ export class SashElement extends TUIElement {
      * `mouseenter` — a show already pending keeps its delay, like vscode's sash.
      */
     public hoverDelay = 300;
+    /**
+     * Which cell of the sash {@link onDrag} reports, counted from its start. A sash several cells
+     * thick (two frames meeting at a boundary: the last column of one and the first of the next)
+     * follows the cell the user grabbed, so the drag does not jump; the owner still receives the
+     * boundary it lays out — e.g. `1` for "the first cell after the left frame".
+     */
+    public anchor = 0;
+    /**
+     * Style variable of the line painted on hover and during a drag, or `null` for none — the
+     * boundary already shows itself (frame lines) and only the pointer shape marks the sash.
+     */
+    public hoverColorVar: string | null = "sash.hoverBorder";
 
     private readonly orientation: SashOrientation;
     private dragging = false;
+    /** The grabbed cell within the sash, from the mousedown. */
+    private grabOffset = 0;
     private restColorVarValue: string | null = null;
     private hoverTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -48,13 +62,15 @@ export class SashElement extends TUIElement {
 
         this.addEventListener("mousedown", (event) => {
             if (event.button !== "left") return;
+            this.grabOffset = this.orientation === "vertical" ? event.localX : event.localY;
             // Dragging lights the line immediately; no point waiting on the hover delay.
             this.clearHoverTimer();
             this.setDragging(true);
         });
         this.addEventListener("mousemove", (event) => {
             if (!this.dragging) return;
-            this.onDrag?.(this.orientation === "vertical" ? event.screenX : event.screenY);
+            const screen = this.orientation === "vertical" ? event.screenX : event.screenY;
+            this.onDrag?.(screen - this.grabOffset + this.anchor);
         });
         this.addEventListener("mouseup", () => {
             this.setDragging(false);
@@ -109,7 +125,7 @@ export class SashElement extends TUIElement {
 
     public override render(context: RenderContext): void {
         const lit = this.hasStyleState("lit") || this.dragging;
-        const colorVar = lit ? "sash.hoverBorder" : this.restColorVarValue;
+        const colorVar = lit ? (this.hoverColorVar ?? this.restColorVarValue) : this.restColorVarValue;
         if (colorVar === null) return;
         const color = this.styleVar(colorVar);
         if (this.orientation === "vertical") {

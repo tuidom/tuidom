@@ -986,6 +986,22 @@ export class TUIElement {
         }
     }
 
+    /**
+     * Перерисовка элемента без перераскладки — из performLayout уже идущего
+     * кадра. Для элемента, чей вид зависит от раскладки потомков (рамка рисует
+     * стыки по строкам разделителей ребёнка): потомок переразложился, а рамка
+     * сама paint-грязной не стала. Damage-обход идёт сразу после layout и
+     * подберёт флаг в этом же кадре; markDirty здесь оставил бы корень
+     * layout-грязным ПОСЛЕ кадра (см. {@link setStyleStateDuringLayout}).
+     * Вне кадра флаг не планирует рендер — там нужен {@link markDirty}.
+     */
+    public markPaintDirtyDuringLayout(): void {
+        this.isPaintDirty = true;
+        for (let current = this._parent; current !== null; current = current._parent) {
+            current.hasPaintDirtyDescendant = true;
+        }
+    }
+
     /** Мутация набора состояний; true — значение реально изменилось. */
     private applyStyleState(state: StyleState, active: boolean): boolean {
         const current = this.styleStatesSet?.has(state) === true;

@@ -6,13 +6,15 @@ import type { CellPatch } from "@tuidom/core/rendering/grid";
 import { TerminalScreen } from "@tuidom/core/rendering/terminalScreen";
 import { describe, expect, it } from "vitest";
 
-import { EditorTabItemElement, PREVIEW_STATE } from "./editorTabItemElement.ts";
+import { EditorTabItemElement, PREVIEW_STATE, TAB_HEIGHT } from "./editorTabItemElement.ts";
 
 // Записывающий контекст — style ячеек MockTerminalBackend наружу не отдаёт.
+// Пишет только строку метки и считает колонки от внутреннего края левой
+// боковой линии: x = 0 — первая ячейка после `│`.
 class RecordingContext extends RenderContext {
     public readonly calls: { x: number; patch: CellPatch }[] = [];
     public override setCell(x: number, y: number, patch: CellPatch): void {
-        this.calls.push({ x, patch });
+        if (y === LABEL_ROW) this.calls.push({ x: x - 1, patch });
         super.setCell(x, y, patch);
     }
     /** Последний патч ячейки — фон заливается первым, поверх ложится содержимое. */
@@ -22,7 +24,7 @@ class RecordingContext extends RenderContext {
 }
 
 function render(tab: EditorTabItemElement): RecordingContext {
-    const size = new Size(tab.getMaxIntrinsicWidth(1), 1);
+    const size = new Size(tab.getMaxIntrinsicWidth(1), TAB_HEIGHT);
     const context = new RecordingContext(new TerminalScreen(size));
     tab.localPosition = new Offset(0, 0);
     tab.layout(BoxConstraints.tight(size));
@@ -32,6 +34,7 @@ function render(tab: EditorTabItemElement): RecordingContext {
 }
 
 const ICON = "";
+const LABEL_ROW = 1;
 
 describe("EditorTabItemElement — предпросмотр", () => {
     it("пишет курсивом только имя: иконка и крестик — прямым начертанием", () => {

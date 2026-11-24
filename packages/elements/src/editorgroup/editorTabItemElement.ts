@@ -5,6 +5,12 @@ import { RenderContext, TUIElement } from "@tuidom/core/dom/tuiElement";
 
 const CLOSE_CHAR = "×";
 const MODIFIED_CHAR = "●";
+/** Rows of a tab: its top line, the label row, and the baseline it stands on. */
+export const TAB_HEIGHT = 3;
+/** The tab's side lines, one cell each. */
+const SIDES = 2;
+const LABEL_ROW = 1;
+const BASELINE_ROW = 2;
 
 /** Стилевое состояние вкладки удалённого файла (см. {@link EditorTabItemElement.setDeleted}). */
 export const DELETED_STATE = "deleted";
@@ -23,6 +29,7 @@ export class EditorTabItemElement extends TUIElement {
     private paddingLeft: number;
     private paddingRight: number;
     private hovered = false;
+    private leadingEdgeValue = false;
 
     public onActivate: (() => void) | null = null;
     public onClose: (() => void) | null = null;
@@ -169,6 +176,21 @@ export class EditorTabItemElement extends TUIElement {
         this.markDirty();
     }
 
+    public getLeadingEdge(): boolean {
+        return this.leadingEdgeValue;
+    }
+
+    /**
+     * The tab stands at the very start of the strip, its left side over the frame's left side: the
+     * baseline cell under it is the frame's side going on (`│`) for the active tab, and the
+     * frame's side meeting the baseline (`├`) for an inactive one.
+     */
+    public setLeadingEdge(value: boolean): void {
+        if (this.leadingEdgeValue === value) return;
+        this.leadingEdgeValue = value;
+        this.markDirty();
+    }
+
     public getPaddingLeft(): number {
         return this.paddingLeft;
     }
@@ -198,11 +220,11 @@ export class EditorTabItemElement extends TUIElement {
         const iconPart = this.icon.length > 0 ? this.icon.length + 1 : 0; // icon + space
         const lockPart = this.readOnly ? 2 : 0; // lock (one cell, see GLYPH_TOKEN_DEFAULTS) + space
         const trailingPart = 2; // " ●" or " ×"
-        return this.paddingLeft + iconPart + lockPart + this.label.length + trailingPart + this.paddingRight;
+        return SIDES + this.paddingLeft + iconPart + lockPart + this.label.length + trailingPart + this.paddingRight;
     }
 
     private getCloseButtonStart(): number {
-        return this.getContentWidth() - this.paddingRight - CLOSE_CHAR.length;
+        return this.getContentWidth() - 1 - this.paddingRight - CLOSE_CHAR.length;
     }
 
     // ─── Intrinsic Size ───
@@ -216,11 +238,11 @@ export class EditorTabItemElement extends TUIElement {
     }
 
     public override getMinIntrinsicHeight(_width: number): number {
-        return 1;
+        return TAB_HEIGHT;
     }
 
     public override getMaxIntrinsicHeight(_width: number): number {
-        return 1;
+        return TAB_HEIGHT;
     }
 
     protected override performLayout(constraints: BoxConstraints): Size {
@@ -230,38 +252,58 @@ export class EditorTabItemElement extends TUIElement {
 
     // ─── Render ───
 
+    /**
+     * A tab is a box three rows tall: `╭──╮` on top, `│ label × │`, and the baseline. The active
+     * tab opens into the editor below (`╯  ╰`); an inactive one stands on the baseline (`┴──┴`),
+     * which runs on under the free space of the strip and is the editor frame's top line.
+     */
     public override render(context: RenderContext): void {
         const width = this.layoutSize.width;
         const resolved = this.resolvedStyle;
-        let x = 0;
+        const bg = resolved.bg;
+        const border = this.styleVar("tab.border");
+        const active = this.hasStyleState("active");
 
-        // Fill background for the whole width first
-        for (let i = 0; i < width; i++) {
-            context.setCell(i, 0, { char: " ", fg: resolved.fg, bg: resolved.bg });
+        for (let y = 0; y < TAB_HEIGHT; y++) {
+            for (let x = 0; x < width; x++) context.setCell(x, y, { char: " ", fg: resolved.fg, bg });
+        }
+        if (width < SIDES) return;
+        const right = width - 1;
+
+        context.setCell(0, 0, { char: "╭", fg: border, bg });
+        context.setCell(right, 0, { char: "╮", fg: border, bg });
+        for (let x = 1; x < right; x++) context.setCell(x, 0, { char: "─", fg: border, bg });
+        context.setCell(0, LABEL_ROW, { char: "│", fg: border, bg });
+        context.setCell(right, LABEL_ROW, { char: "│", fg: border, bg });
+
+        const leftFoot = this.leadingEdgeValue ? (active ? "│" : "├") : active ? "╯" : "┴";
+        context.setCell(0, BASELINE_ROW, { char: leftFoot, fg: border, bg });
+        context.setCell(right, BASELINE_ROW, { char: active ? "╰" : "┴", fg: border, bg });
+        if (!active) {
+            for (let x = 1; x < right; x++) context.setCell(x, BASELINE_ROW, { char: "─", fg: border, bg });
         }
 
-        // Padding left (already filled with spaces)
-        x += this.paddingLeft;
+        this.renderLabelRow(context, right);
+    }
 
-        // Icon
-        if (this.icon.length > 0 && x < width) {
-            context.setCell(x, 0, { char: this.icon, fg: this.iconColor, bg: resolved.bg });
-            x += this.icon.length;
-            if (x < width) {
-                context.setCell(x, 0, { char: " ", fg: resolved.fg, bg: resolved.bg });
-                x += 1;
-            }
+    /** `[paddingLeft][icon ][lock ][label][ ●/×][paddingRight]` between the side lines. */
+    private renderLabelRow(context: RenderContext, end: number): void {
+        const resolved = this.resolvedStyle;
+        const fg = resolved.fg;
+        const bg = resolved.bg;
+        const y = LABEL_ROW;
+        let x = 1 + this.paddingLeft;
+
+        if (this.icon.length > 0 && x < end) {
+            context.setCell(x, y, { char: this.icon, fg: this.iconColor, bg });
+            x += this.icon.length + 1;
         }
 
         // Read-only lock, between the file icon and the label.
-        if (this.readOnly && x < width) {
+        if (this.readOnly && x < end) {
             // Codicon-замок по умолчанию — тот же глиф, которым VS Code метит read-only вкладку.
-            context.setCell(x, 0, { char: this.glyph("editorTab.readOnly"), fg: resolved.fg, bg: resolved.bg });
-            x += 1;
-            if (x < width) {
-                context.setCell(x, 0, { char: " ", fg: resolved.fg, bg: resolved.bg });
-                x += 1;
-            }
+            context.setCell(x, y, { char: this.glyph("editorTab.readOnly"), fg, bg });
+            x += 2;
         }
 
         // Label — struck through when the file is gone (VS Code strikethrough decoration),
@@ -269,23 +311,16 @@ export class EditorTabItemElement extends TUIElement {
         const labelStyle =
             (this.deleted ? StyleFlags.Strikethrough : StyleFlags.None) |
             (this.preview ? StyleFlags.Italic : StyleFlags.None);
-        for (let i = 0; i < this.label.length && x < width; i++) {
-            context.setCell(x, 0, { char: this.label[i], fg: resolved.fg, bg: resolved.bg, style: labelStyle });
+        for (let i = 0; i < this.label.length && x < end; i++) {
+            context.setCell(x, y, { char: this.label[i], fg, bg, style: labelStyle });
             x += 1;
         }
 
         // Trailing indicator: the modified dot until the tab is hovered, then
         // the close cross (VSCode behaviour). Clicking the slot always closes.
         const trailingChar = this.modified && !this.hovered ? MODIFIED_CHAR : CLOSE_CHAR;
-        if (x + 1 < width) {
-            context.setCell(x, 0, { char: " ", fg: resolved.fg, bg: resolved.bg });
-            x += 1;
-            context.setCell(x, 0, {
-                char: trailingChar,
-                fg: resolved.fg,
-                bg: resolved.bg,
-                style: StyleFlags.None,
-            });
+        if (x + 1 < end) {
+            context.setCell(x + 1, y, { char: trailingChar, fg, bg, style: StyleFlags.None });
         }
     }
 }

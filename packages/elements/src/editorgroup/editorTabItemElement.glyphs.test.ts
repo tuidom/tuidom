@@ -2,11 +2,12 @@ import { Point } from "@tuidom/core/common/geometryPromitives";
 import { renderElement } from "@tuidom/testing/renderElement";
 import { describe, expect, it } from "vitest";
 
-import { EditorTabItemElement } from "./editorTabItemElement.ts";
+import { EditorTabItemElement, TAB_HEIGHT } from "./editorTabItemElement.ts";
 
+/** The label row between the tab's side lines. */
 function renderText(tab: EditorTabItemElement): string {
     const width = tab.getMaxIntrinsicWidth(1);
-    return renderElement(tab, width, 1).getTextAt(new Point(0, 0), width);
+    return renderElement(tab, width, TAB_HEIGHT).getTextAt(new Point(1, 1), width - 2);
 }
 
 describe("EditorTabItemElement glyphs", () => {

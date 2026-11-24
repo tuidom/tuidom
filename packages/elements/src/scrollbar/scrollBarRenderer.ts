@@ -15,68 +15,6 @@ export interface ScrollBarColors {
     readonly background: number;
 }
 
-export interface ScrollBarMetrics {
-    /** Thumb start position in half-cell units (0 = top of track). */
-    thumbStartHalves: number;
-    /** Thumb size in half-cell units (minimum 2 = 1 full cell). */
-    thumbSizeHalves: number;
-}
-
-export function computeScrollBarMetrics(
-    trackHeight: number,
-    contentHeight: number,
-    scrollTop: number,
-    viewportHeight: number,
-): ScrollBarMetrics {
-    const trackHalves = trackHeight * 2;
-
-    if (contentHeight <= viewportHeight) {
-        return { thumbStartHalves: 0, thumbSizeHalves: trackHalves };
-    }
-
-    const thumbSizeHalves = Math.max(2, Math.round((viewportHeight / contentHeight) * trackHalves));
-    const maxScroll = contentHeight - viewportHeight;
-    const scrollFraction = Math.min(1, Math.max(0, scrollTop / maxScroll));
-    const thumbStartHalves = Math.round(scrollFraction * (trackHalves - thumbSizeHalves));
-
-    return { thumbStartHalves, thumbSizeHalves };
-}
-
-/**
- * For each cell row, determine the character to display.
- *
- * Each cell covers 2 halves: top half and bottom half.
- * - Both halves inside thumb → "█"
- * - Only top half inside thumb → "▀"
- * - Only bottom half inside thumb → "▄"
- * - Neither half inside thumb → " "
- */
-export function getScrollBarCellChars(trackHeight: number, metrics: ScrollBarMetrics): string[] {
-    const { thumbStartHalves, thumbSizeHalves } = metrics;
-    const thumbEndHalves = thumbStartHalves + thumbSizeHalves;
-    const result: string[] = [];
-
-    for (let row = 0; row < trackHeight; row++) {
-        const topHalf = row * 2;
-        const bottomHalf = topHalf + 1;
-
-        const topInThumb = topHalf >= thumbStartHalves && topHalf < thumbEndHalves;
-        const bottomInThumb = bottomHalf >= thumbStartHalves && bottomHalf < thumbEndHalves;
-
-        if (topInThumb && bottomInThumb) {
-            result.push("█");
-        } else if (topInThumb) {
-            result.push("▀");
-        } else if (bottomInThumb) {
-            result.push("▄");
-        } else {
-            result.push("░");
-        }
-    }
-
-    return result;
-}
-
 /** The marker that won a track cell, and how many markers fell into it. */
 export interface ScrollBarMarkerCell {
     readonly color: number;
@@ -284,7 +222,11 @@ export function getFlatTrackColor(track: number, background: number): number {
     return compositeOver(packRgba(unpackR(track), unpackG(track), unpackB(track), alpha), background);
 }
 
-/** Classic bar: a half-block thumb over a ░ track. */
+/**
+ * Classic bar: a █ thumb over a ░ track, in whole cells. Half-block thumb ends would follow the
+ * scroll by half a cell, but a thumb whose ends flicker between ▀ and ▄ reads as noise in a
+ * terminal; a whole-cell thumb steps cleanly, like the bar with markers.
+ */
 export function renderScrollBar(
     context: RenderContext,
     x: number,
@@ -294,13 +236,19 @@ export function renderScrollBar(
     viewportHeight: number,
     colors: ScrollBarColors,
 ): void {
-    const metrics = computeScrollBarMetrics(trackHeight, contentHeight, scrollTop, viewportHeight);
-    const chars = getScrollBarCellChars(trackHeight, metrics);
-
+    const { thumbStart, thumbSize } = computeScrollBarCellMetrics(
+        trackHeight,
+        contentHeight,
+        scrollTop,
+        viewportHeight,
+    );
     for (let row = 0; row < trackHeight; row++) {
-        const char = chars[row];
-        const fg = char === "░" ? colors.track : colors.thumb;
-        context.setCell(x, row, { char, fg, bg: colors.background });
+        const onThumb = row >= thumbStart && row < thumbStart + thumbSize;
+        context.setCell(x, row, {
+            char: onThumb ? "█" : "░",
+            fg: onThumb ? colors.thumb : colors.track,
+            bg: colors.background,
+        });
     }
 }
 
