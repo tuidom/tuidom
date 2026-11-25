@@ -89,8 +89,8 @@ describe("MenuBarElement focus colors", () => {
 
         backend.sendKey("Tab"); // focus menuBar → activeIndex=0 ("File")
 
-        // " File " positions should have ACTIVE_MENU_BG (starts at x=2 due to spacer)
-        for (let x = 2; x < 8; x++) {
+        // " File " positions should have ACTIVE_MENU_BG (starts at x=1 due to spacer)
+        for (let x = 1; x < 7; x++) {
             expect(backend.getBgAt(new Point(x, 0))).toBe(ACTIVE_MENU_BG);
         }
     });
@@ -100,7 +100,7 @@ describe("MenuBarElement focus colors", () => {
 
         backend.sendKey("Tab");
 
-        for (let x = 2; x < 8; x++) {
+        for (let x = 1; x < 7; x++) {
             expect(backend.getFgAt(new Point(x, 0))).toBe(ACTIVE_MENU_FG);
         }
     });
@@ -110,8 +110,8 @@ describe("MenuBarElement focus colors", () => {
 
         backend.sendKey("Tab"); // focus → "File" active
 
-        // " Edit " at x=8..13 should keep bar colors
-        for (let x = 8; x < 14; x++) {
+        // " Edit " at x=7..12 should keep bar colors
+        for (let x = 7; x < 13; x++) {
             expect(backend.getBgAt(new Point(x, 0))).toBe(MENU_BAR_BG);
         }
     });
@@ -123,12 +123,12 @@ describe("MenuBarElement focus colors", () => {
         backend.sendKey("ArrowRight"); // → "Edit"
 
         // " File " should revert to bar colors
-        for (let x = 2; x < 8; x++) {
+        for (let x = 1; x < 7; x++) {
             expect(backend.getBgAt(new Point(x, 0))).toBe(MENU_BAR_BG);
         }
 
         // " Edit " should have active colors
-        for (let x = 8; x < 14; x++) {
+        for (let x = 7; x < 13; x++) {
             expect(backend.getBgAt(new Point(x, 0))).toBe(ACTIVE_MENU_BG);
         }
     });
@@ -146,6 +146,49 @@ describe("MenuBarElement focus colors", () => {
     });
 });
 
+function moveMouse(backend: MockTerminalBackend, x: number, y: number): void {
+    backend.simulateMouse({
+        kind: "mouse",
+        button: "none",
+        action: "move",
+        x: x + 1,
+        y: y + 1,
+        shiftKey: false,
+        altKey: false,
+        ctrlKey: false,
+        raw: "",
+    });
+}
+
+describe("MenuBarElement hover feedback", () => {
+    it("item under the mouse takes the selection colors without focusing the bar", () => {
+        const { backend, menuBar } = setup(simpleItems());
+
+        moveMouse(backend, 8, 0); // inside " Edit " (x=7..12)
+
+        expect(menuBar.isFocused).toBe(false);
+        for (let x = 7; x < 13; x++) {
+            expect(backend.getBgAt(new Point(x, 0))).toBe(ACTIVE_MENU_BG);
+            expect(backend.getFgAt(new Point(x, 0))).toBe(ACTIVE_MENU_FG);
+        }
+        // Neighbours and the spacer keep the bar colors.
+        for (const x of [0, 1, 6, 13, 18]) {
+            expect(backend.getBgAt(new Point(x, 0))).toBe(MENU_BAR_BG);
+        }
+    });
+
+    it("leaving the item restores the bar colors", () => {
+        const { backend } = setup(simpleItems());
+
+        moveMouse(backend, 8, 0);
+        moveMouse(backend, 5, 5); // off the bar
+
+        for (let x = 0; x < 18; x++) {
+            expect(backend.getBgAt(new Point(x, 0))).toBe(MENU_BAR_BG);
+        }
+    });
+});
+
 describe("MenuBarElement menu styles", () => {
     const customBg = packRgb(0x12, 0x34, 0x56);
 
@@ -156,8 +199,8 @@ describe("MenuBarElement menu styles", () => {
         backend.sendKey("Tab"); // focus menuBar → "File"
         backend.sendKey("Enter"); // open dropdown
 
-        // Top-left corner of the dropdown frame (x=2: "File" starts after the 2-cell spacer).
-        expect(backend.getBgAt(new Point(2, 1))).toBe(customBg);
+        // Top-left corner of the dropdown frame (x=1: "File" starts after the 1-cell spacer).
+        expect(backend.getBgAt(new Point(1, 1))).toBe(customBg);
     });
 
     it("смена корневой таблицы перекрашивает уже открытый дропдаун", () => {
@@ -165,11 +208,11 @@ describe("MenuBarElement menu styles", () => {
 
         backend.sendKey("Tab");
         backend.sendKey("Enter"); // open dropdown с дефолтами токенов
-        expect(backend.getBgAt(new Point(2, 1))).toBe(STYLE_TOKEN_DEFAULTS["menu.background"]);
+        expect(backend.getBgAt(new Point(1, 1))).toBe(STYLE_TOKEN_DEFAULTS["menu.background"]);
 
         app.root?.setStyleVars({ "menu.background": customBg });
         backend.sendKey("x"); // inert for the open menu; forces a synchronous re-render
 
-        expect(backend.getBgAt(new Point(2, 1))).toBe(customBg);
+        expect(backend.getBgAt(new Point(1, 1))).toBe(customBg);
     });
 });

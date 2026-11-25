@@ -28,9 +28,13 @@ export class MenuBarItemElement extends CompositeElement {
         });
 
         // Обычное состояние наследует цвета полосы (их задаёт MenuBarElement
-        // токенами menuBar.*), активный пункт — токены menubar.selection*.
+        // токенами menuBar.*), активный пункт и пункт под мышью — токены
+        // menubar.selection* (эталон: `.menubar-menu-button:hover` в menubarControl.css).
         this.style = {
-            when: [{ states: ["active"], fg: "menubar.selectionForeground", bg: "menubar.selectionBackground" }],
+            when: [
+                { states: ["active"], fg: "menubar.selectionForeground", bg: "menubar.selectionBackground" },
+                { states: ["hover"], fg: "menubar.selectionForeground", bg: "menubar.selectionBackground" },
+            ],
         };
 
         const text = new TextLabelElement(` ${this.label} `);
