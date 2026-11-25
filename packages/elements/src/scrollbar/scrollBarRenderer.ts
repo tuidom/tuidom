@@ -271,6 +271,23 @@ export function computeScrollBarCellMetrics(
 }
 
 /**
+ * The inverse of {@link computeScrollBarCellMetrics}: the scroll offset that puts the thumb's first
+ * cell at `thumbStart` (clamped to the track). Content that fits has nowhere to scroll: 0.
+ */
+export function scrollPositionForThumbStart(
+    thumbStart: number,
+    trackSize: number,
+    contentSize: number,
+    viewportSize: number,
+): number {
+    const { thumbSize } = computeScrollBarCellMetrics(trackSize, contentSize, 0, viewportSize);
+    const travel = trackSize - thumbSize;
+    if (travel <= 0) return 0;
+    const clamped = Math.min(travel, Math.max(0, thumbStart));
+    return Math.round((clamped * (contentSize - viewportSize)) / travel);
+}
+
+/**
  * Paints one marked cell over `bg`: a density glyph, a half block at the end of a run, or a full
  * fill (`fullBg` — the run's colour, possibly tinted by the thumb).
  */
@@ -364,18 +381,8 @@ export function renderHorizontalScrollBar(
     viewportWidth: number,
     colors: ScrollBarColors,
 ): void {
-    if (contentWidth <= viewportWidth) {
-        // Content fits — only reachable under policy "always"; the thumb spans the track.
-        for (let col = 0; col < trackWidth; col++) {
-            context.setCell(col, y, { char: "▄", fg: colors.thumb, bg: colors.background });
-        }
-        return;
-    }
-
-    const thumbSize = Math.max(1, Math.round((viewportWidth / contentWidth) * trackWidth));
-    const maxScroll = contentWidth - viewportWidth;
-    const scrollFraction = Math.min(1, Math.max(0, scrollLeft / maxScroll));
-    const thumbStart = Math.round(scrollFraction * (trackWidth - thumbSize));
+    // Content that fits (only under policy "always") gets a thumb spanning the track.
+    const { thumbStart, thumbSize } = computeScrollBarCellMetrics(trackWidth, contentWidth, scrollLeft, viewportWidth);
     const thumbEnd = thumbStart + thumbSize;
 
     for (let col = 0; col < trackWidth; col++) {

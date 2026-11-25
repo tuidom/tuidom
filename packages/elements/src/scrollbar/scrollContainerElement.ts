@@ -1,13 +1,16 @@
 import { BoxConstraints, Offset, Point, Rect, Size } from "@tuidom/core/common/geometryPromitives";
+import type { TUIMouseEvent } from "@tuidom/core/dom/events/tuiMouseEvent";
 import { RenderContext, TUIElement } from "@tuidom/core/dom/tuiElement";
 
 import type { IScrollable, IScrollBarMarker } from "./iScrollable.ts";
 import type { ScrollBarColors } from "./scrollBarRenderer.ts";
 import {
+    computeScrollBarCellMetrics,
     renderHorizontalScrollBar,
     renderOverviewScrollBar,
     renderScrollBar,
     renderScrollBarMarkerColumn,
+    scrollPositionForThumbStart,
 } from "./scrollBarRenderer.ts";
 
 export type ScrollBarPolicy = "auto" | "always" | "never";
@@ -23,6 +26,14 @@ export type ScrollBarPolicy = "auto" | "always" | "never";
 export type ScrollBarMarkerPlacement = "none" | "inside" | "outside" | "auto";
 
 type ResolvedMarkerPlacement = "none" | "inside" | "outside";
+
+type ScrollBarAxis = "vertical" | "horizontal";
+
+/** A thumb held by the left button: the axis and the cell of the thumb under the pointer. */
+interface ThumbDrag {
+    readonly axis: ScrollBarAxis;
+    readonly grabOffset: number;
+}
 
 /**
  * Draws scrollbars alongside a scrollable child.
@@ -46,10 +57,24 @@ export class ScrollBarDecorator extends TUIElement {
     /** Narrowest decorator that `"auto"` gives a marker column. */
     public markerColumnMinWidth = 80;
 
+    private drag: ThumbDrag | null = null;
+
     public constructor(child: TUIElement & IScrollable) {
         super();
         this.child = child;
         this.appendChild(this.child);
+        // A thumb drag keeps going when the pointer leaves the bar, as in VS Code. Presses on the
+        // child target the child, so the capture covers only the decorator's own cells.
+        this.capturesPointer = true;
+        this.addEventListener("mousedown", (event) => {
+            this.handleMouseDown(event);
+        });
+        this.addEventListener("mousemove", (event) => {
+            this.handleMouseMove(event);
+        });
+        this.addEventListener("mouseup", () => {
+            this.drag = null;
+        });
     }
 
     public getChild(): TUIElement & IScrollable {
@@ -141,6 +166,64 @@ export class ScrollBarDecorator extends TUIElement {
                 this.child.scrollLeft,
                 childWidth,
                 colors,
+            );
+        }
+    }
+
+    /**
+     * VS Code's `AbstractScrollbar`: a press on the thumb grabs it; a press on the track moves the
+     * thumb's middle under the pointer (`getDesiredScrollPositionFromOffset`) and grabs it there,
+     * so the same press can go on dragging.
+     */
+    private handleMouseDown(event: TUIMouseEvent): void {
+        // A press bubbling up from the child is the child's own business.
+        if (event.target !== this || event.button !== "left" || this.child.scrollTo === undefined) return;
+        const axis = this.scrollBarAt(event.localX, event.localY);
+        if (axis === null) return;
+        const offset = axis === "vertical" ? event.localY : event.localX;
+        const { thumbStart, thumbSize } = this.thumbMetrics(axis);
+        const onThumb = offset >= thumbStart && offset < thumbStart + thumbSize;
+        const grabOffset = onThumb ? offset - thumbStart : Math.floor(thumbSize / 2);
+        this.drag = { axis, grabOffset };
+        if (!onThumb) this.moveThumb(axis, offset - grabOffset);
+    }
+
+    private handleMouseMove(event: TUIMouseEvent): void {
+        if (this.drag === null) return;
+        const offset = this.drag.axis === "vertical" ? event.localY : event.localX;
+        this.moveThumb(this.drag.axis, offset - this.drag.grabOffset);
+    }
+
+    /** Which bar the decorator's own cell belongs to; the marker column counts as the vertical bar. */
+    private scrollBarAt(localX: number, localY: number): ScrollBarAxis | null {
+        const childWidth = this.child.layoutSize.width;
+        const childHeight = this.child.layoutSize.height;
+        if (localX >= childWidth && localY < childHeight) return "vertical";
+        if (localY >= childHeight && localX < childWidth) return "horizontal";
+        // The corner where the bars meet belongs to neither.
+        return null;
+    }
+
+    private thumbMetrics(axis: ScrollBarAxis): { thumbStart: number; thumbSize: number } {
+        const { child } = this;
+        const { width, height } = child.layoutSize;
+        return axis === "vertical"
+            ? computeScrollBarCellMetrics(height, child.contentHeight, child.scrollTop, height)
+            : computeScrollBarCellMetrics(width, child.contentWidth, child.scrollLeft, width);
+    }
+
+    private moveThumb(axis: ScrollBarAxis, thumbStart: number): void {
+        const { child } = this;
+        const { width, height } = child.layoutSize;
+        if (axis === "vertical") {
+            child.scrollTo?.(
+                child.scrollLeft,
+                scrollPositionForThumbStart(thumbStart, height, child.contentHeight, height),
+            );
+        } else {
+            child.scrollTo?.(
+                scrollPositionForThumbStart(thumbStart, width, child.contentWidth, width),
+                child.scrollTop,
             );
         }
     }

@@ -16,9 +16,9 @@ export default defineConfig({
                 // уход уменьшил знаменатель — непокрытых строк от этого не
                 // прибавилось ни одной. Переякорено по факту, а не опущено под
                 // недостающие тесты.
-                statements: 99.61,
+                statements: 99.62,
                 branches: 99.82,
-                functions: 99.03,
+                functions: 99.04,
                 lines: 99.66,
             },
             reporter: ["text", "lcov", "json", "json-summary", "text-summary"],
