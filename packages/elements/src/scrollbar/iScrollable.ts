@@ -24,4 +24,9 @@ export interface IScrollable extends IContentSized {
      * change must reach the screen through the child's own `markDirty`.
      */
     getScrollBarMarkers?(): readonly IScrollBarMarker[];
+    /**
+     * Scrolls to the offset, clamped to the content. A scrollable with it lets
+     * `ScrollBarDecorator` drive it with the mouse: a press on the track and a drag of the thumb.
+     */
+    scrollTo?(left: number, top: number): void;
 }
