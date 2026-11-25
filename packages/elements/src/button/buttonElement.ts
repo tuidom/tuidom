@@ -2,12 +2,21 @@ import { DisplayLine } from "@tuidom/core/common/displayLine";
 import { BoxConstraints, Size } from "@tuidom/core/common/geometryPromitives";
 import type { TUIEventBase } from "@tuidom/core/dom/events/tuiEventBase";
 import { TUIKeyboardEvent } from "@tuidom/core/dom/events/tuiKeyboardEvent";
+import type { GlyphToken } from "@tuidom/core/dom/glyphTokens";
 import { RenderContext, TUIElement } from "@tuidom/core/dom/tuiElement";
 
 import { wrapText } from "../completionlist/completionDetailsElement.ts";
 
-/** `[ ` и ` ]` вокруг подписи. */
+/** `[ ` и ` ]` вокруг подписи; без рамки — по пробелу с каждой стороны. */
 const FRAME_WIDTH = 4;
+const BARE_FRAME_WIDTH = 2;
+
+/**
+ * Подпись кнопки: текст или глиф по токену. Глиф резолвится на рендере через
+ * {@link TUIElement.glyph} — кнопка-шеврон рисует тот же символ, что дерево, и
+ * следует за таблицей хоста (Nerd Font или нет).
+ */
+export type ButtonLabel = string | { readonly glyph: GlyphToken };
 
 export interface ButtonElementOptions {
     /**
@@ -17,18 +26,26 @@ export interface ButtonElementOptions {
      * welcome-видов VS Code (`width: 100%`, перенос текста) в узком сайдбаре.
      */
     readonly wrap?: boolean;
+    /**
+     * Без скобок: ` label ` — по пробелу с каждой стороны, ширина = подпись + 2.
+     * Для компактных кнопок-тумблеров в строке поля ввода (`Aa`, `.*`) и
+     * иконок-шевронов, где `[ Aa ]` занимает слишком много места.
+     */
+    readonly bare?: boolean;
 }
 
 export class ButtonElement extends TUIElement {
     public onActivate?: () => void;
 
-    private readonly label: string;
+    private label: ButtonLabel;
     private readonly wrap: boolean;
+    private readonly bare: boolean;
 
-    public constructor(label: string, options: ButtonElementOptions = {}) {
+    public constructor(label: ButtonLabel, options: ButtonElementOptions = {}) {
         super();
         this.label = label;
         this.wrap = options.wrap ?? false;
+        this.bare = options.bare ?? false;
         this.focusable = true;
         // Вся state-логика цвета — в when-вариантах: hover/focus ставит ядро,
         // "checked" (тумблеры) — setChecked. Порядок = приоритет: checked
@@ -52,8 +69,15 @@ export class ButtonElement extends TUIElement {
         });
     }
 
+    /** Текст подписи; у глифа — символ по ближайшей таблице глифов. */
     public getLabel(): string {
-        return this.label;
+        return typeof this.label === "string" ? this.label : this.glyph(this.label.glyph);
+    }
+
+    /** Меняет подпись (шеврон «свёрнуто/развёрнуто»); ширина может измениться. */
+    public setLabel(label: ButtonLabel): void {
+        this.label = label;
+        this.markDirty();
     }
 
     /** Режим «включённого тумблера» (кнопки-переключатели поиска): primary-вид. */
@@ -62,11 +86,11 @@ export class ButtonElement extends TUIElement {
     }
 
     public override getMinIntrinsicWidth(_height: number): number {
-        return this.label.length + 4;
+        return this.getLabel().length + this.frameWidth;
     }
 
     public override getMaxIntrinsicWidth(_height: number): number {
-        return this.label.length + 4;
+        return this.getLabel().length + this.frameWidth;
     }
 
     public override getMinIntrinsicHeight(width: number): number {
@@ -96,14 +120,15 @@ export class ButtonElement extends TUIElement {
         const { fg, bg } = this.resolvedStyle;
         const width = this.layoutSize.width;
         const lines = this.lines(width);
+        const [open, close] = this.bare ? [" ", " "] : ["[ ", " ]"];
         if (lines.length === 1) {
-            context.drawText(0, 0, `[ ${this.label} ]`, { fg, bg }, { maxWidth: width });
+            context.drawText(0, 0, `${open}${lines[0]}${close}`, { fg, bg }, { maxWidth: width });
             return;
         }
         const last = lines.length - 1;
         for (const [y, line] of lines.entries()) {
-            const head = `${y === 0 ? "[" : " "} ${line}`;
-            const tail = y === last ? " ]" : "";
+            const head = `${y === 0 ? open : " ".repeat(open.length)}${line}`;
+            const tail = y === last ? close : "";
             const gap = " ".repeat(Math.max(0, width - new DisplayLine(head).displayWidth - tail.length));
             context.drawText(0, y, head + gap + tail, { fg, bg }, { maxWidth: width });
         }
@@ -111,7 +136,12 @@ export class ButtonElement extends TUIElement {
 
     /** Строки подписи при ширине `width`; без `wrap` и когда влезает — одна. */
     private lines(width: number): readonly string[] {
-        if (!this.wrap || width >= this.getMaxIntrinsicWidth(1)) return [this.label];
-        return wrapText(this.label, Math.max(1, width - FRAME_WIDTH));
+        const label = this.getLabel();
+        if (!this.wrap || width >= this.getMaxIntrinsicWidth(1)) return [label];
+        return wrapText(label, Math.max(1, width - this.frameWidth));
+    }
+
+    private get frameWidth(): number {
+        return this.bare ? BARE_FRAME_WIDTH : FRAME_WIDTH;
     }
 }
