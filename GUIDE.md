@@ -463,7 +463,7 @@ will be generated from source — see `docs/TODO/ApiReferenceGeneration.md`.
 | `TextLabelElement` | label with per-char styling (`setCharStyle`); one line, or wrapped to its width with `wrap = true` (as tall as the lines it takes) |
 | `TextBlockElement` | multi-line word-wrapped text, scrollable content |
 | **Controls** | |
-| `ButtonElement` | push button; `{ wrap: true }` wraps a label wider than the box by words |
+| `ButtonElement` | push button; `{ wrap: true }` wraps a label wider than the box by words; `{ bare: true }` drops the brackets (` Aa `) for compact toggles; the label may be a glyph token (`{ glyph: "tree.collapsed" }`), `setLabel` swaps it |
 | `InputElement` | text input; `maskChar` renders every grapheme as that glyph (password field); `multiline = true` — `\n` breaks lines, the field grows up to `maxVisibleLines`, Up/Down move between lines (and are left to the owner on the first/last line, see `cursorLine`/`lineCount`), Home/End go to the line's ends, a paste keeps its line breaks |
 | `SelectBoxElement` | dropdown select |
 | `CompletionListElement` / `CompletionWidgetElement` / `CompletionDetailsElement` | completion popup family |
