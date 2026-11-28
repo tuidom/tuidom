@@ -107,3 +107,23 @@ export function searchLike(ctx: StoryContext): void {
         list.focus();
     });
 }
+
+/**
+ * Группы, как в quick pick'е: линия `─` над первой строкой группы
+ * (`separatorBefore`), над первой строкой списка её нет. Стрелки, клик и
+ * колесо линию не посещают.
+ */
+export function groupSeparators(ctx: StoryContext): void {
+    ctx.body.title = "ListViewElement — group separators (separatorBefore)";
+    const list = new ListViewElement({ groupSeparatorColor: "widget.border" });
+    for (let g = 0; g < 20; g++) {
+        for (let i = 0; i < 4; i++) {
+            const id = `g${g}/i${i}`;
+            list.appendRow(makeRow(id, `group ${g} · item ${i}`), { separatorBefore: i === 0 });
+        }
+    }
+    ctx.body.setContent(new ScrollBarDecorator(list));
+    ctx.afterRun(() => {
+        list.focus();
+    });
+}
