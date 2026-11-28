@@ -48,6 +48,14 @@ const BRACKETED_PASTE_ENABLE = "\x1b[?2004h";
 const BRACKETED_PASTE_DISABLE = "\x1b[?2004l";
 
 /**
+ * Focus reports (DEC private mode ?1004): the terminal sends `CSI I` when its window gains
+ * focus and `CSI O` when it loses it. tmux understands the mode and tracks it per pane
+ * (reports reach the pane only with `focus-events on`), so it is written directly.
+ */
+const FOCUS_REPORTS_ENABLE = "\x1b[?1004h";
+const FOCUS_REPORTS_DISABLE = "\x1b[?1004l";
+
+/**
  * Window-title stack (XTWINOPS): `CSI 22 ; 0 t` saves the icon and window titles,
  * `CSI 23 ; 0 t` restores them — the same push/pop vim does around its own title, so the
  * shell's title comes back on exit. tmux keeps the stack per pane; terminals without it
@@ -197,6 +205,7 @@ export class NodeTerminalBackend implements ITerminalBackend {
     private oscResponseCallbacks: ((code: number, data: string) => void)[] = [];
     private deviceReportCallbacks: ((report: DeviceReportKind, params: string) => void)[] = [];
     private colorSchemeCallbacks: ((scheme: HostColorScheme) => void)[] = [];
+    private focusCallbacks: ((focused: boolean) => void)[] = [];
     /** Mode 2031 is on — teardown owes the terminal its reset. */
     private colorSchemeReportsOn = false;
     /** DA1-запросов отправлено / ответов получено — чтобы проба ждала именно свой DA1. */
@@ -349,6 +358,10 @@ export class NodeTerminalBackend implements ITerminalBackend {
         this.writeDirect(COLOR_SCHEME_REPORTS_ENABLE + COLOR_SCHEME_QUERY);
     }
 
+    public onFocusChange(callback: (focused: boolean) => void): void {
+        this.focusCallbacks.push(callback);
+    }
+
     public probeKeyboardProtocol(onResult: (supported: boolean) => void): void {
         let supported = false;
         // Direct (not passthrough): the reply must reflect tmux's own Kitty support, per-pane.
@@ -461,6 +474,9 @@ export class NodeTerminalBackend implements ITerminalBackend {
         }
         for (const oscToken of result.osc) {
             for (const cb of this.oscResponseCallbacks) cb(oscToken.code, oscToken.data);
+        }
+        for (const focused of result.focus) {
+            for (const cb of this.focusCallbacks) cb(focused);
         }
         for (const report of result.deviceReports) {
             if (report.report === "da1") this.da1Received++;
@@ -585,6 +601,8 @@ export class NodeTerminalBackend implements ITerminalBackend {
         this.writeDirect(MOUSE_TRACKING_ALL_ENABLE);
         // Enable bracketed paste so pastes arrive as one text block — direct, per-pane
         this.writeDirect(BRACKETED_PASTE_ENABLE);
+        // Enable focus reports (CSI I / CSI O) — direct, per-pane
+        this.writeDirect(FOCUS_REPORTS_ENABLE);
 
         // Raw mode for character-by-character input
         this.stdin.setRawMode(true);
@@ -654,6 +672,8 @@ export class NodeTerminalBackend implements ITerminalBackend {
         this.writeDirect(MOUSE_TRACKING_DISABLE);
         // Disable bracketed paste — direct (matches the per-pane enable in setup)
         this.writeDirect(BRACKETED_PASTE_DISABLE);
+        // Disable focus reports — direct (matches the per-pane enable in setup)
+        this.writeDirect(FOCUS_REPORTS_DISABLE);
         if (this.colorSchemeReportsOn) {
             this.writeDirect(COLOR_SCHEME_REPORTS_DISABLE);
             this.colorSchemeReportsOn = false;

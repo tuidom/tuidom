@@ -112,6 +112,20 @@ export class HeadlessCaptureBackend implements ITerminalBackend {
         if (this.colorScheme !== undefined) callback(this.colorScheme);
     }
 
+    private readonly focusCallbacks: ((focused: boolean) => void)[] = [];
+
+    public onFocusChange(callback: (focused: boolean) => void): void {
+        this.focusCallbacks.push(callback);
+    }
+
+    /**
+     * Simulate the terminal's focus report (mode 1004): `true` — `CSI I`, `false` — `CSI O`.
+     * Goes through the input parser, the same path as live stdin.
+     */
+    public sendFocus(focused: boolean): void {
+        this.sendRaw(focused ? "\x1b[I" : "\x1b[O");
+    }
+
     /** Simulate the terminal's unasked report that its scheme flipped (the OS switched appearance). */
     public sendColorScheme(scheme: HostColorScheme): void {
         this.colorScheme = scheme;
@@ -213,6 +227,9 @@ export class HeadlessCaptureBackend implements ITerminalBackend {
         }
         for (const text of streams.paste) {
             for (const cb of this.pasteCallbacks) cb(text);
+        }
+        for (const focused of streams.focus) {
+            for (const cb of this.focusCallbacks) cb(focused);
         }
     }
 }

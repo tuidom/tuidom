@@ -158,6 +158,20 @@ export interface DeviceReportToken {
 
 export type DeviceReportKind = "kitty-flags" | "da1" | "xtversion" | "color-scheme";
 
+// ─── Focus tokens ───
+
+/**
+ * A focus report (DEC private mode 1004): with the mode on the terminal sends a bare
+ * `CSI I` when its window (a tmux pane, with `focus-events on`) gains focus and a bare
+ * `CSI O` when it loses it — NOT a key event. `CSI 1 ; <mod> I` (mintty's Ctrl+Tab)
+ * carries parameters and stays a key.
+ */
+export interface FocusToken {
+    readonly kind: "focus";
+    readonly focused: boolean;
+    readonly raw: string;
+}
+
 // ─── Mouse tokens ───
 
 export type MouseButton = "left" | "middle" | "right" | "none";
@@ -194,7 +208,8 @@ export type RawTerminalToken =
     | UnknownCsiToken
     | MouseToken
     | OscToken
-    | DeviceReportToken;
+    | DeviceReportToken
+    | FocusToken;
 
 export type RawKeyToken =
     | CsiUToken

@@ -3,6 +3,7 @@ import type {
     CsiTildeToken,
     CsiUToken,
     DeviceReportToken,
+    FocusToken,
     MouseToken,
     OscToken,
     RawTerminalToken,
@@ -524,7 +525,7 @@ export function inferCode(key: string): string {
 // ─── CSI parser ───
 
 interface CSITokenResult {
-    token: CsiUToken | CsiLetterToken | CsiTildeToken | MouseToken | DeviceReportToken | UnknownCsiToken;
+    token: CsiUToken | CsiLetterToken | CsiTildeToken | MouseToken | DeviceReportToken | UnknownCsiToken | FocusToken;
     nextIndex: number;
 }
 
@@ -580,6 +581,13 @@ export function parseCSI(data: string, start: number): CSITokenResult | null {
     // CSI ? 997 ; <scheme> n → color-scheme report (mode 2031); `n` with `?` is never a key either.
     if (finalByte === "n" && paramStrings[0] === "?997") {
         const token: DeviceReportToken = { kind: "device-report", report: "color-scheme", params, raw };
+        return { token, nextIndex };
+    }
+
+    // Bare CSI I / CSI O → focus report (mode 1004). Checked before the key maps: `I` there
+    // is Tab, and only its modified form (`CSI 1 ; 5 I`, mintty's Ctrl+Tab) is a real key.
+    if (raw.length === 3 && (finalByte === "I" || finalByte === "O")) {
+        const token: FocusToken = { kind: "focus", focused: finalByte === "I", raw };
         return { token, nextIndex };
     }
 
