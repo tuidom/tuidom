@@ -221,4 +221,17 @@ describe("HeadlessCaptureBackend", () => {
         expect(answered).toHaveBeenLastCalledWith("light");
         expect(backend.colorScheme).toBe("light");
     });
+
+    it("sendFocus delivers focus reports through the input parser, never as keys", () => {
+        const backend = new HeadlessCaptureBackend();
+        const focus = vi.fn();
+        const keys = vi.fn();
+        backend.onFocusChange(focus);
+        backend.onInput(keys);
+        backend.sendFocus(false);
+        backend.sendRaw("\x1b[I");
+        backend.sendFocus(true);
+        expect(focus.mock.calls).toEqual([[false], [true], [true]]);
+        expect(keys).not.toHaveBeenCalled();
+    });
 });

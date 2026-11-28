@@ -16,7 +16,12 @@ import { tokenize } from "./tokenize.ts";
  */
 export function parseInput(data: string): KeyPressEvent[] {
     const keyTokens = tokenize(data).filter(
-        (t) => t.kind !== "mouse" && t.kind !== "osc" && t.kind !== "device-report" && t.kind !== "unknown-csi",
+        (t) =>
+            t.kind !== "mouse" &&
+            t.kind !== "osc" &&
+            t.kind !== "device-report" &&
+            t.kind !== "unknown-csi" &&
+            t.kind !== "focus",
     ) as RawKeyToken[];
     return keyTokens.map(convertTokenToKeyPressEvent);
 }

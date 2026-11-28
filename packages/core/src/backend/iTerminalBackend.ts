@@ -88,6 +88,16 @@ export interface ITerminalBackend {
     onColorSchemeChange(callback: (scheme: HostColorScheme) => void): void;
 
     /**
+     * Subscribe to the terminal's focus reports (DEC private mode 1004, turned on by
+     * `setup`): `true` when its window gains focus (`CSI I`), `false` when it loses it
+     * (`CSI O`). Inside tmux the window is the pane, and tmux forwards the reports only
+     * with `set -g focus-events on`. The protocol has no query for the current state, so
+     * nothing fires before the first report; a terminal without the mode never reports.
+     * Reports are consumed by the backend and never reach `onInput`.
+     */
+    onFocusChange(callback: (focused: boolean) => void): void;
+
+    /**
      * Render a frame: receive the current grid, cursor position and cursor shape
      * (`null` — the terminal's default shape; meaningless while the position is `null`).
      * The backend decides how to output it (ANSI diffing, simple copy, etc.).

@@ -119,10 +119,12 @@ interface InputStreams {
     deviceReports: DeviceReportToken[];
     /** Text blocks delivered via bracketed paste (already newline-normalized). */
     paste: string[];
+    /** Focus reports (mode 1004) in arrival order: `true` — gained, `false` — lost. */
+    focus: boolean[];
 }
 
 function emptyStreams(): InputStreams {
-    return { keys: [], mouse: [], osc: [], deviceReports: [], paste: [] };
+    return { keys: [], mouse: [], osc: [], deviceReports: [], paste: [], focus: [] };
 }
 
 export class KeyInputParser {
@@ -239,6 +241,8 @@ export class KeyInputParser {
                 streams.osc.push(token);
             } else if (token.kind === "device-report") {
                 streams.deviceReports.push(token);
+            } else if (token.kind === "focus") {
+                streams.focus.push(token.focused);
             } else if (token.kind === "unknown-csi") {
                 // Complete but unrecognized CSI sequence — drop it (never type it as text).
             } else {
