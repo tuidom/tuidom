@@ -714,7 +714,8 @@ export class ListViewElement extends ScrollableElement {
 
         const [start, end] = this.windowIndices(scrollTop, viewportHeight);
         const separatorFg = this.rowSeparatorColor === null ? null : this.resolveColor(this.rowSeparatorColor);
-        const groupSeparatorFg = this.resolveColor(this.groupSeparatorColor);
+        // Лениво: палитра без этого токена не должна ронять список, где линий групп нет.
+        let groupSeparatorFg: number | null = null;
         // Только строки, чьи слоты пересекают клип: частичный damage-кадр не платит за остальные.
         const first = Math.max(start, this.slotIndexAtLine(scrollTop + clipTopY));
         for (let rowIndex = first; rowIndex < end && this.rowTops[rowIndex] - scrollTop < clipBottomY; rowIndex++) {
@@ -743,7 +744,11 @@ export class ListViewElement extends ScrollableElement {
 
             // 4. Разделитель под строкой — на фоне списка, вне подсветки строки:
             // общий после каждой строки или граница группы над следующей.
-            const lineFg = separatorFg ?? (rows.at(rowIndex + 1)?.separatorBefore === true ? groupSeparatorFg : null);
+            const lineFg =
+                separatorFg ??
+                (rows.at(rowIndex + 1)?.separatorBefore === true
+                    ? (groupSeparatorFg ??= this.resolveColor(this.groupSeparatorColor))
+                    : null);
             if (lineFg !== null && bottomY >= clipTopY && bottomY < clipBottomY) {
                 for (let x = 0; x < viewportWidth; x++) {
                     context.setCell(x, bottomY, {
