@@ -468,7 +468,7 @@ will be generated from source — see `docs/TODO/ApiReferenceGeneration.md`.
 | `SelectBoxElement` | dropdown select |
 | `CompletionListElement` / `CompletionWidgetElement` / `CompletionDetailsElement` | completion popup family |
 | **Lists** | |
-| `ListViewElement` | virtualized list of element rows (100k rows ≈ 1 ms/frame); cursor (`clearCursor()` — no current row), multi-select, typeahead, collapsible hierarchy; multi-line rows (`appendRow(el, { height })`, scrolling snaps to row tops; `height: "auto"` — the row's own `getMinIntrinsicHeight` at the width it gets, measured again when the list width changes: wrapped text) an optional separator line between rows (`rowSeparatorColor`); `openOnSingleClick` |
+| `ListViewElement` | virtualized list of element rows (100k rows ≈ 1 ms/frame); cursor (`clearCursor()` — no current row), multi-select, typeahead, collapsible hierarchy; multi-line rows (`appendRow(el, { height })`, scrolling snaps to row tops; `height: "auto"` — the row's own `getMinIntrinsicHeight` at the width it gets, measured again when the list width changes: wrapped text) an optional separator line between rows (`rowSeparatorColor`); a group line above a row (`appendRow(el, { separatorBefore: true })`, color `groupSeparatorColor`, none above the first visible row); `openOnSingleClick` |
 | `TreeViewElement` | data-driven tree (provider model) |
 | **Menus** | |
 | `MenuBarElement` / `MenuBarItemElement` | horizontal menu bar with mnemonics |

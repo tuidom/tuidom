@@ -55,6 +55,16 @@ export interface IListRowOptions {
      * который пересобирает строки из своей модели, не ловит свои же события.
      */
     readonly collapsed?: boolean;
+    /**
+     * Линия `─` во всю ширину над строкой — граница группы (разделитель quick
+     * pick'а эталона). Контракт тот же, что у {@link IListViewOptions.rowSeparatorColor}:
+     * линия не часть строки, hover и выделение её не красят, клик по ней ничего
+     * не выбирает, навигация её не посещает, а высота контента и прокрутка её
+     * учитывают. Над первой видимой строкой линии нет (как `border-top` первой
+     * строки у эталона), а с `rowSeparatorColor` линия под предыдущей строкой
+     * уже есть — вторая не добавляется. Цвет — {@link IListViewOptions.groupSeparatorColor}.
+     */
+    readonly separatorBefore?: boolean;
 }
 
 export interface IListViewOptions {
@@ -66,6 +76,8 @@ export interface IListViewOptions {
      * ней строку не выбирает. Не задан — разделителей нет.
      */
     readonly rowSeparatorColor?: StyleColor;
+    /** Цвет линий {@link IListRowOptions.separatorBefore}; по умолчанию `widget.border`. */
+    readonly groupSeparatorColor?: StyleColor;
     /** См. {@link ListViewElement.openOnSingleClick}. */
     readonly openOnSingleClick?: boolean | (() => boolean);
 }
@@ -80,6 +92,7 @@ interface ListRow {
     /** Для строки `"auto"` — последний замер (см. {@link ListViewElement.measureRow}). */
     height: number;
     readonly autoHeight: boolean;
+    readonly separatorBefore: boolean;
     hidden: boolean;
 }
 
@@ -163,6 +176,7 @@ export class ListViewElement extends ScrollableElement {
     private readonly indentSize: number;
     private readonly typeaheadEnabled: boolean;
     private readonly rowSeparatorColor: StyleColor | null;
+    private readonly groupSeparatorColor: StyleColor;
     /** Ширина последнего layout: по ней меряются строки `"auto"`; 0 — layout ещё не было. */
     private measureWidth = 0;
     private autoRowCount = 0;
@@ -230,6 +244,7 @@ export class ListViewElement extends ScrollableElement {
         this.indentSize = options?.indentSize ?? DEFAULT_INDENT_SIZE;
         this.typeaheadEnabled = options?.typeahead ?? true;
         this.rowSeparatorColor = options?.rowSeparatorColor ?? null;
+        this.groupSeparatorColor = options?.groupSeparatorColor ?? "widget.border";
         this.openOnSingleClick = options?.openOnSingleClick ?? false;
         // Смена фокуса входит в LIST_ROW_ACTIVE_STATE курсорной строки, а
         // FocusManager метит поддерево только style-грязным — раскрытие же
@@ -281,6 +296,7 @@ export class ListViewElement extends ScrollableElement {
             label: options?.label,
             height,
             autoHeight,
+            separatorBefore: options?.separatorBefore === true,
             hidden: false,
         };
         this.rowById.set(id, row);
@@ -698,6 +714,7 @@ export class ListViewElement extends ScrollableElement {
 
         const [start, end] = this.windowIndices(scrollTop, viewportHeight);
         const separatorFg = this.rowSeparatorColor === null ? null : this.resolveColor(this.rowSeparatorColor);
+        const groupSeparatorFg = this.resolveColor(this.groupSeparatorColor);
         // Только строки, чьи слоты пересекают клип: частичный damage-кадр не платит за остальные.
         const first = Math.max(start, this.slotIndexAtLine(scrollTop + clipTopY));
         for (let rowIndex = first; rowIndex < end && this.rowTops[rowIndex] - scrollTop < clipBottomY; rowIndex++) {
@@ -724,12 +741,14 @@ export class ListViewElement extends ScrollableElement {
                 });
             }
 
-            // 4. Разделитель под строкой — на фоне списка, вне подсветки строки.
-            if (separatorFg !== null && bottomY >= clipTopY && bottomY < clipBottomY) {
+            // 4. Разделитель под строкой — на фоне списка, вне подсветки строки:
+            // общий после каждой строки или граница группы над следующей.
+            const lineFg = separatorFg ?? (rows.at(rowIndex + 1)?.separatorBefore === true ? groupSeparatorFg : null);
+            if (lineFg !== null && bottomY >= clipTopY && bottomY < clipBottomY) {
                 for (let x = 0; x < viewportWidth; x++) {
                     context.setCell(x, bottomY, {
                         char: ROW_SEPARATOR_CHAR,
-                        fg: separatorFg,
+                        fg: lineFg,
                         bg: resolved.bg,
                         width: 1,
                     });
@@ -740,9 +759,18 @@ export class ListViewElement extends ScrollableElement {
 
     // ─── Private: geometry ───
 
-    /** Строки экрана, которые занимает строка списка вместе с разделителем под ней. */
+    /** Строки экрана строки списка вместе с общим разделителем под ней. */
     private slotHeight(row: ListRow): number {
         return row.height + (this.rowSeparatorColor === null ? 0 : 1);
+    }
+
+    /**
+     * Линия границы группы над строкой, которая встаёт в проекцию следом за
+     * `previousCount` строками: над первой её нет, а общий разделитель уже
+     * провёл линию под предыдущей. Линия входит в слот предыдущей строки.
+     */
+    private groupLineBefore(row: ListRow, previousCount: number): number {
+        return row.separatorBefore && previousCount > 0 && this.rowSeparatorColor === null ? 1 : 0;
     }
 
     /**
@@ -835,6 +863,7 @@ export class ListViewElement extends ScrollableElement {
         let lines = 0;
         for (const row of out) {
             this.measureRow(row);
+            lines += this.groupLineBefore(row, tops.length);
             tops.push(lines);
             lines += this.slotHeight(row);
         }
@@ -900,11 +929,11 @@ export class ListViewElement extends ScrollableElement {
             }
         }
         this.measureRow(row);
-        const top = this.contentLines;
+        const top = this.contentLines + this.groupLineBefore(row, rows.length);
         this.visibleIndexById.set(row.id, rows.length);
         rows.push(row);
         this.rowTops.push(top);
-        this.contentLines += this.slotHeight(row);
+        this.contentLines = top + this.slotHeight(row);
         // Строка попала в разложенное окно (контент короче вьюпорта), но сама ещё
         // не разложена — делегация кликов не должна доверять её ленивой позиции.
         // Append за окном делегацию не трогает: гард по концу окна отсеет индекс.
