@@ -1,5 +1,6 @@
 import { Point, Size } from "@tuidom/core/common/geometryPromitives";
 import { TUIMouseEvent } from "@tuidom/core/dom/events/tuiMouseEvent";
+import { DARK_PLUS_STYLE_VARS } from "@tuidom/testing/darkPlusStyleVars";
 import { TestApp } from "@tuidom/testing/TestApp";
 import { describe, expect, it } from "vitest";
 
@@ -85,6 +86,18 @@ describe("ListViewElement group separators (separatorBefore)", () => {
         const { app } = makeList(["a", "|b"], { list: {} });
 
         expect(app.backend.getFgAt(new Point(0, 1))).toBe(WIDGET_BORDER);
+    });
+
+    it("a palette without the group color still renders a list that has no group line", () => {
+        const palette: Record<string, number> = { ...DARK_PLUS_STYLE_VARS };
+        delete palette["widget.border"];
+        const list = new ListViewElement();
+        const label = new TextLabelElement("a");
+        label.id = "a";
+        list.appendRow(label);
+        const app = TestApp.createWithContent(list, new Size(10, 3), palette);
+
+        expect(lines(app, 1)).toEqual(["a"]);
     });
 
     it("adds no second line next to the per-row separator", () => {
